@@ -9,6 +9,12 @@ should match this document, not the other way around.
 what distinguishes an Artist Card (null) from a Music Card (set). See
 `02-product.md` § Card Types.
 
+**Phase 0 note:** fields marked below as added/changed for the
+pre-NFC MVP (admin upload, password-gated releases, no cards or fan
+accounts yet) are explained in `11-mvp-phase0.md`. This doc stays the
+authoritative full-system schema either way — Phase 0 is a subset plus
+a handful of additive fields, not a fork.
+
 ---
 
 ## Users & Artists
@@ -20,6 +26,7 @@ what distinguishes an Artist Card (null) from a Music Card (set). See
 | email | string | unique |
 | name | string? | optional |
 | role | enum: `FAN`, `ARTIST`, `ADMIN` | default `FAN` |
+| passwordHash | string? | **Phase 0 addition.** Set for `ADMIN` users (admin login); null for others until fan auth is designed |
 | createdAt / updatedAt | datetime | |
 
 Relations: one optional `Artist` profile, many owned `CardOwnership`
@@ -29,7 +36,7 @@ rows, many `PlayEvent` rows.
 | Field | Type | Notes |
 |---|---|---|
 | id | string (cuid) | primary key |
-| userId | string | unique, FK → User |
+| userId | string? | unique, FK → User. **Phase 0: nullable** — admin creates artist profiles without a live account; backfilled once self-serve artist signup ships |
 | name | string | |
 | slug | string | unique |
 | bio | string? | |
@@ -51,6 +58,9 @@ Relations: many `Release`s, many `Card`s (cards with `releaseId = null`
 | artistId | string | FK → Artist |
 | title | string | |
 | releasedAt | datetime? | |
+| visibility | enum: `PUBLIC`, `PRIVATE` | **Phase 0 addition.** Default `PUBLIC` |
+| passwordHash | string? | **Phase 0 addition.** Set only when `visibility = PRIVATE`; hashed, never returned by any API response |
+| coverImageKey | string? | **Phase 0 addition.** Album-level cover art; fallback for tracks with no cover of their own |
 | createdAt / updatedAt | datetime | |
 
 Relations: many `Track`s, many `Card`s (cards with `releaseId` set —
@@ -64,6 +74,9 @@ Music Cards — point here).
 | title | string | |
 | durationSec | int? | |
 | trackNumber | int? | |
+| mediaType | enum: `AUDIO`, `VIDEO` | **Phase 0 addition.** Drives player UI and worker handling |
+| lyrics | string? (text) | **Phase 0 addition.** Plain text for MVP; a timed-lyrics format can replace it later without changing the column's meaning |
+| coverImageKey | string? | **Phase 0 addition.** Per-track cover; falls back to `Release.coverImageKey` when null |
 | status | enum: `PROCESSING`, `READY`, `FAILED` | default `PROCESSING` |
 | rawStorageKey | string? | raw upload bucket key, pre-transcode |
 | processedStorageKey | string? | processed bucket key — what gets signed-URL'd |
@@ -116,13 +129,17 @@ open question in `02-product.md` before changing this shape.
 | Field | Type | Notes |
 |---|---|---|
 | id | string (cuid) | primary key |
-| cardId | string | FK → Card |
-| trackId | string? | FK → Track |
-| userId | string | FK → User |
+| cardId | string? | FK → Card. **Phase 0: nullable** — no cards exist yet |
+| trackId | string | FK → Track. **Phase 0: required** — the play/view target in the absence of a card |
+| userId | string? | FK → User. **Phase 0: nullable** — no fan accounts yet |
 | playedAt | datetime | default now |
 
-Logged on every successful tap-to-play. This is the basis for both
-artist analytics (plays per track) and revenue-share calculations.
+Logged on every successful tap-to-play (later) or play/view through
+the public or password-unlocked flow (Phase 0, per
+`11-mvp-phase0.md`). One shape covers both audio plays and video
+views — no separate `ViewEvent` table. This is the basis for both
+artist analytics (plays per track) and revenue-share calculations
+once those exist.
 
 ---
 
@@ -136,10 +153,11 @@ User 1───? Artist 1───* Release 1───* Track
  └────────────────────────────────┴──* PlayEvent ──* User
 ```
 
-- A `User` may have one `Artist` profile.
+- A `User` may have one `Artist` profile (optional in Phase 0 — admin
+  can create an `Artist` with no linked `User` yet).
 - An `Artist` has many `Release`s and many `Card`s.
 - A `Release` has many `Track`s and many `Card`s (the Music Cards bound
-  to it).
+  to it), and is either `PUBLIC` or password-`PRIVATE` (Phase 0).
 - A `Card` has at most one `CardOwnership` (the claiming user).
-- A `PlayEvent` references the `Card`, the `Track` played, and the
-  `User` who played it.
+- A `PlayEvent` references the `Track` played, and optionally the
+  `Card` and `User` involved once those exist.
