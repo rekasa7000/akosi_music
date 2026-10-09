@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: akosi
+      POSTGRES_PASSWORD: akosi
+      POSTGRES_DB: akosi
+    ports:
+      - "5432:5432"
+    volumes:
+      - akosi-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akosi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Emulates real AWS S3 locally (not a different product like MinIO) —
+  # the storage adapter talks the actual AWS S3 API either way, so
+  # pointing it at real AWS later is just an env var change.
+  localstack:
+    image: localstack/localstack:3.8
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: akosi
+      AWS_SECRET_ACCESS_KEY: akosi-dev-secret
+    ports:
+      - "4566:4566" # edge port — all emulated AWS APIs
+    volumes:
+      - akosi-localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  localstack-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: akosi
+      AWS_SECRET_ACCESS_KEY: akosi-dev-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: >
+      sh -c "
+      aws --endpoint-url=http://localstack:4566 s3 mb s3://akosi-raw &&
+      aws --endpoint-url=http://localstack:4566 s3 mb s3://akosi-media
+      "
+
+  # Local SMTP catcher — verification/login-MFA emails land here instead
+  # of a real inbox during dev. Web UI at :8025, SMTP at :1025.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI + API (used to assert on sent emails in tests)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/api/v1/info"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  akosi-postgres-data:
+  akosi-localstack-data:
