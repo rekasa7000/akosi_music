@@ -6,8 +6,9 @@ tap the card, verify ownership, stream the music. See
 
 ## Status
 
-Pre-build, proposal stage. `apps/web` and `apps/api` are scaffolded;
-`apps/worker`, `packages/database`, and `packages/shared` are not yet.
+Pre-build, proposal stage. `apps/web`, `apps/api`, and
+`packages/database` are scaffolded; `apps/worker` and
+`packages/shared` are not yet.
 
 ## Layout
 
@@ -17,9 +18,10 @@ apps/
   api/      ownership auth, catalog, signed URLs (Fastify) — scaffolded
   worker/   audio transcoding                      — not yet scaffolded
 packages/
-  database/ Prisma schema + client, shared by api and worker
+  database/ Prisma schema + client, shared by api and worker — scaffolded
   shared/   shared types, constants, validation schemas
 docs/       project spec — start at 01-claude.md
+docker-compose.yml  local dev: Postgres + LocalStack (S3) + Mailpit (email)
 ```
 
 Full write-up of this layout and the reasoning behind it:
@@ -33,9 +35,12 @@ Full write-up of this layout and the reasoning behind it:
 ## Getting started
 
 ```bash
-pnpm install        # installs all workspace packages from the root
-pnpm dev             # turbo run dev — runs every scaffolded app
-pnpm build           # turbo run build
+docker compose up -d                        # starts local Postgres + LocalStack (S3) + Mailpit, one-time per machine
+pnpm install                                 # installs all workspace packages from the root
+pnpm --filter @akosi/database migrate:dev   # applies DB migrations (first run only)
+pnpm --filter @akosi/database seed          # creates the one admin account (first run only)
+pnpm dev                                     # turbo run dev — runs every scaffolded app
+pnpm build                                   # turbo run build
 ```
 
 Always install from the repo root (`pnpm install`, or `pnpm add <pkg>

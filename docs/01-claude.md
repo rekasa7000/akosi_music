@@ -79,9 +79,14 @@ do this, even for convenience or local testing shortcuts. See
 | "What's the data model / DB schema?" | `09-data-model.md` |
 | "What are the coding conventions per app?" | `08-conventions.md` |
 | "What's the actual folder/monorepo structure?" | `10-project-structure.md` |
+| "What's buildable before NFC cards exist?" | `11-mvp-phase0.md` |
+| "How does admin login/MFA work?" | `12-admin-authentication.md` |
 
 ## Current project status
 
 Pre-build, proposal stage. Target: start November 2026, launch June 2027.
 Most of the system described in these documents does not have working
 code yet — these documents are the spec engineering work will fill in.
+`11-mvp-phase0.md` describes the first buildable slice (admin upload,
+playback, password/public access) that doesn't depend on card hardware
+arriving first.
