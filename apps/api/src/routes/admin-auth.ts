@@ -104,6 +104,23 @@ export async function adminAuthRoutes(app: FastifyInstance) {
         return { step: "SET_EMAIL" as const, challengeToken };
       }
       if (!user.passwordSetAt) {
+        // Defense in depth, flagged by security review: an account
+        // with totpConfirmedAt already set has a trusted second
+        // factor — reaching PASSWORD_SETUP from the password check
+        // alone would mean the password can be replaced without MFA,
+        // an authentication bypass. Shouldn't happen post-backfill
+        // (every code path sets passwordSetAt before totpConfirmedAt),
+        // but if that invariant is ever violated by a future bug,
+        // fail toward requiring normal MFA login, not toward silently
+        // allowing an unauthenticated-by-TOTP password change.
+        if (user.totpConfirmedAt) {
+          const { challengeToken } = await createLoginMfaChallenge(user.id);
+          return {
+            step: "SELECT_MFA_METHOD" as const,
+            challengeToken,
+            availableMethods: ["EMAIL", "TOTP"],
+          };
+        }
         const { challengeToken } = await createPasswordSetupChallenge(user.id);
         return { step: "PASSWORD_SETUP" as const, challengeToken };
       }

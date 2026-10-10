@@ -97,6 +97,43 @@ email-only → resumes at `PASSWORD_SETUP`; email+password → resumes at
 `TOTP_ENROLLMENT` (with a fresh secret — the old one was never
 activated); all three done → normal `SELECT_MFA_METHOD`.
 
+**MFA bypass via the new column itself, found by security review on
+the fix above:** `passwordSetAt` is a new column — any admin row that
+completed setup *before* it existed gets `NULL` by default, since
+Prisma doesn't backfill new columns. The resume logic then reads that
+`NULL` as "still needs password setup" and issues a `PASSWORD_SETUP`
+challenge from the password check alone, even for an account with
+TOTP already confirmed and trusted — a password reset reachable
+without the second factor.
+
+The reviewer's suggested backfill condition
+(`emailVerifiedAt IS NOT NULL AND passwordHash IS NOT NULL`) turned out
+to have the same blind spot the whole fix was about: `passwordHash` is
+non-null even on the bootstrap password, so that condition can't tell
+"real password set" apart from "still on bootstrap." Used a precise
+signal instead, grounded in this codebase's actual history: TOTP
+enrollment has only ever followed a successful password replacement,
+so any row with `totpConfirmedAt` set necessarily already had a real
+password. Backfilled `passwordSetAt = totpConfirmedAt` for exactly
+those rows (migration `20261010042015_backfill_password_set_at`);
+left ambiguous rows (`totpConfirmedAt` still null) as `NULL` on
+purpose — the safe default there is "ask for password-setup again,"
+never "skip it." Verified the backfill SQL against a simulated legacy
+row directly.
+
+Added a second layer on top, per the reviewer's broader point ("never
+re-enroll/reset without verifying the existing factor"): `/admin/login`
+now checks `totpConfirmedAt` before honoring a `PASSWORD_SETUP` resume
+— if a trusted second factor already exists, it routes to normal MFA
+login instead, regardless of what `passwordSetAt` says. This is pure
+defense in depth (the backfill above already makes the violating state
+unreachable through any real code path), but it means a *future* bug
+reintroducing this gap fails toward "require MFA" rather than toward
+"skip it" silently. Verified live by directly constructing a row that
+still violates the invariant (`totpConfirmedAt` set, `passwordSetAt`
+null) and confirming login routes to `SELECT_MFA_METHOD`, not
+`PASSWORD_SETUP`.
+
 ---
 
 ## Why this shape
