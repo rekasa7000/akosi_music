@@ -18,11 +18,22 @@ function createS3Client() {
   const endpoint = process.env.S3_ENDPOINT;
   return new S3Client({
     region: process.env.S3_REGION ?? "us-east-1",
-    ...(endpoint && { endpoint, forcePathStyle: true }),
-    credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "akosi",
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "akosi-dev-secret",
-    },
+    // Dev-only override block: point at LocalStack with its throwaway
+    // credentials. In a real deployment S3_ENDPOINT is unset, so this
+    // entire block — including the credential fallbacks — is never
+    // constructed; the SDK's default provider chain (IAM role, etc.)
+    // takes over instead. Previously the credentials fallback was
+    // unconditional, which is a hardcoded-default-credential pattern
+    // (CWE-798/1188) even though the fallback values were never real
+    // AWS keys — flagged by security review.
+    ...(endpoint && {
+      endpoint,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "akosi",
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "akosi-dev-secret",
+      },
+    }),
     // Without this, the SDK attaches an x-amz-checksum-crc32 query
     // param to presigned URLs computed from an empty body (since the
     // real body isn't known at presign time) — any real upload body
@@ -39,6 +50,18 @@ function getS3Client(): S3Client {
 }
 
 const DEFAULT_EXPIRY_SECONDS = 10 * 60;
+const KNOWN_BUCKETS = new Set([RAW_BUCKET, MEDIA_BUCKET]);
+
+// Defense in depth: the current caller already constrains `bucket` to
+// one of two values via a route-level enum, but this adapter is meant
+// to be the one place in the app that talks to S3 directly — it
+// shouldn't rely solely on every future caller remembering to
+// constrain it too.
+function assertKnownBucket(bucket: string): void {
+  if (!KNOWN_BUCKETS.has(bucket)) {
+    throw new Error(`Refusing to operate on unrecognized bucket: ${bucket}`);
+  }
+}
 
 export async function createPresignedUploadUrl(params: {
   bucket: string;
@@ -46,6 +69,7 @@ export async function createPresignedUploadUrl(params: {
   contentType: string;
   expiresInSeconds?: number;
 }): Promise<string> {
+  assertKnownBucket(params.bucket);
   const command = new PutObjectCommand({
     Bucket: params.bucket,
     Key: params.key,
@@ -61,6 +85,7 @@ export async function createPresignedPlaybackUrl(params: {
   key: string;
   expiresInSeconds?: number;
 }): Promise<string> {
+  assertKnownBucket(params.bucket);
   const command = new GetObjectCommand({
     Bucket: params.bucket,
     Key: params.key,

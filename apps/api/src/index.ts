@@ -51,6 +51,14 @@ await app.register(adminAuthRoutes);
 // second layer regardless — defense in depth, not a substitute for
 // the auth check.
 const BucketAlias = Type.Union([Type.Literal("raw"), Type.Literal("media")]);
+// Restricts uploads to audio/video/image MIME types. Without this, a
+// client could set contentType to e.g. "text/html" and have it stick
+// as the object's Content-Type — serving attacker-controlled content
+// as HTML from our domain on fetch (stored XSS via content-type
+// confusion), flagged by security review.
+const ContentType = Type.String({
+  pattern: "^(audio|video|image)/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
+});
 
 function resolveBucket(alias: "raw" | "media"): string {
   return alias === "raw" ? RAW_BUCKET : MEDIA_BUCKET;
@@ -69,7 +77,7 @@ if (devUploadRoutesEnabled) {
         body: Type.Object({
           bucket: BucketAlias,
           key: Type.String({ minLength: 1 }),
-          contentType: Type.String({ minLength: 1 }),
+          contentType: ContentType,
         }),
         response: {
           200: Type.Object({

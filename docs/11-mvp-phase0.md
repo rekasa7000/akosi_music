@@ -15,7 +15,17 @@ NFC model" below.
   migrated and verified against local Postgres.
 - ✅ Object storage — `apps/api/src/storage.ts`, verified against
   LocalStack (presign → upload → presign → fetch round trip). See
-  `10-project-structure.md` for the local dev setup.
+  `10-project-structure.md` for the local dev setup. Hardened after a
+  commit security review: the S3 credentials fallback is now scoped
+  to the LocalStack-only code path (never reachable in a real
+  deployment, closing a CWE-798/1188-pattern finding), the adapter
+  itself now refuses to operate on an unrecognized bucket (defense in
+  depth, not just the route-level enum), and `/uploads/presign`'s
+  `contentType` is allowlisted to `audio|video|image` — unrestricted
+  before, which would have let an upload's `Content-Type` be set to
+  something like `text/html` and served back that way (stored XSS via
+  content-type confusion). Verified live: `text/html` → 400,
+  `audio/mpeg` → 200.
 - ✅ Admin auth — full flow from `12-admin-authentication.md` (seed →
   first-login email verification → TOTP enrollment → email-or-TOTP on
   every login after), verified end-to-end. `/uploads/presign` and
