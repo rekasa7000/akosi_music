@@ -19,6 +19,30 @@ function minutesFromNow(minutes: number): Date {
   return new Date(Date.now() + minutes * 60 * 1000);
 }
 
+const SETUP_CHAIN_TYPES = ["EMAIL_VERIFICATION", "PASSWORD_SETUP", "TOTP_ENROLLMENT"] as const;
+
+// Kills every other unconsumed setup-chain challenge for this user.
+// Without this, repeated /admin/login calls while setup is incomplete
+// each mint a fresh, independently-valid EMAIL_VERIFICATION challenge
+// — since the bootstrap credential is a shared/known value by design,
+// that lets two parties race to finish setup with different emails/
+// passwords, whoever completes last silently overwriting the other
+// (flagged by security review as a potential account-takeover path).
+// Called both when a new setup challenge is minted (so only the
+// latest stays valid) and right after one is consumed (so a sibling
+// created in between can't complete afterward).
+async function invalidateOtherSetupChallenges(userId: string, exceptChallengeId?: string) {
+  await prisma.adminAuthChallenge.updateMany({
+    where: {
+      userId,
+      consumedAt: null,
+      type: { in: [...SETUP_CHAIN_TYPES] },
+      ...(exceptChallengeId ? { NOT: { id: exceptChallengeId } } : {}),
+    },
+    data: { consumedAt: new Date() },
+  });
+}
+
 // First-login account setup (docs/12-admin-authentication.md). Starts
 // an EMAIL_VERIFICATION challenge with no code yet — the bootstrap
 // account's email (e.g. "admin") isn't a real address, so there's
@@ -34,6 +58,7 @@ export async function beginAccountSetup(userId: string) {
       expiresAt: minutesFromNow(SETUP_TTL_MINUTES),
     },
   });
+  await invalidateOtherSetupChallenges(userId, challenge.id);
   return { challengeToken: challenge.token };
 }
 
@@ -52,11 +77,19 @@ export async function submitSetupEmail(
   challengeToken: string,
   email: string,
 ): Promise<SubmitEmailResult> {
-  const challenge = await prisma.adminAuthChallenge.findUnique({ where: { token: challengeToken } });
+  const challenge = await prisma.adminAuthChallenge.findUnique({
+    where: { token: challengeToken },
+    include: { user: true },
+  });
   if (!challenge) return { ok: false, reason: "not_found" };
   if (challenge.type !== "EMAIL_VERIFICATION") return { ok: false, reason: "wrong_type" };
   if (challenge.consumedAt) return { ok: false, reason: "already_consumed" };
   if (challenge.expiresAt < new Date()) return { ok: false, reason: "expired" };
+  // Defense in depth: setup already completed via a sibling challenge
+  // (e.g. a race invalidateOtherSetupChallenges didn't catch in time).
+  // This challenge's own fields look fine in isolation, but the user
+  // it belongs to is no longer mid-setup.
+  if (challenge.user.emailVerifiedAt) return { ok: false, reason: "already_consumed" };
 
   const existing = await prisma.user.findFirst({
     where: { email, NOT: { id: challenge.userId } },
@@ -74,6 +107,35 @@ export async function submitSetupEmail(
     subject: "Verify your Akosi admin email",
     text: `Your verification code is ${code}. It expires in ${EMAIL_CODE_TTL_MINUTES} minutes.`,
   });
+  return { ok: true };
+}
+
+type CompleteEmailVerificationResult =
+  | { ok: true }
+  | { ok: false; reason: "already_consumed" };
+
+// Called right after verifyChallengeCode succeeds for an
+// EMAIL_VERIFICATION challenge. The User write is conditional
+// (updateMany + count check) rather than a plain update — if a
+// sibling challenge somehow won the race and already verified a
+// *different* email first, this one must not silently overwrite it.
+// Also invalidates any other still-live setup-chain challenges for
+// this user; the one that was just consumed is already excluded by
+// the consumedAt: null filter, and the follow-up PASSWORD_SETUP
+// challenge is created by the caller *after* this returns, so it's
+// never touched.
+export async function completeEmailVerification(
+  userId: string,
+  pendingEmail: string,
+): Promise<CompleteEmailVerificationResult> {
+  const update = await prisma.user.updateMany({
+    where: { id: userId, emailVerifiedAt: null },
+    data: { email: pendingEmail, emailVerifiedAt: new Date() },
+  });
+  if (update.count === 0) {
+    return { ok: false, reason: "already_consumed" };
+  }
+  await invalidateOtherSetupChallenges(userId);
   return { ok: true };
 }
 
@@ -117,8 +179,9 @@ export async function consumePasswordSetupChallenge(
   const passwordHash = await hash(newPassword);
   await prisma.user.update({
     where: { id: challenge.userId },
-    data: { passwordHash },
+    data: { passwordHash, passwordSetAt: new Date() },
   });
+  await invalidateOtherSetupChallenges(challenge.userId);
   return { ok: true, userId: challenge.userId };
 }
 

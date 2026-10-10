@@ -70,6 +70,33 @@ Not done: a per-user lockout that spans *across* challenges. The
 per-challenge atomic limit closes the actual race; a cross-challenge
 lockout is additional defense in depth — deferred below.
 
+**Account-takeover race found and fixed, proven with a parallel-login
+test:** the bootstrap credential is shared/known by design, so nothing
+stopped two parties from calling `/admin/login` at the same time and
+each getting their own independently-valid `EMAIL_VERIFICATION`
+challenge for the same user — whoever finished their chain (own email,
+own password, own TOTP) would silently take over the account. Proven
+live: logged in twice with `admin`/`admin`, got two different
+challenge tokens, then confirmed the **first** token was already
+rejected (`already_consumed`) by the time the **second** one was used
+— closed by `invalidateOtherSetupChallenges`, called every time a new
+setup-chain challenge is minted or a step is consumed, so only the
+latest chain for a user is ever live.
+
+Fixing this surfaced a second, independent bug while reasoning through
+it: `/admin/login`'s gate only checked `emailVerifiedAt`, not
+`totpConfirmedAt`. A setup interrupted between email-verify and
+TOTP-confirm would have fallen through to ordinary `LOGIN_MFA` on the
+next login — issuing a full session via email-OTP alone, with TOTP
+never actually confirmed. Fixed by adding a third flag,
+`User.passwordSetAt` (tracked separately because `emailVerifiedAt`
+and `totpConfirmedAt` alone can't distinguish "needs password" from
+"needs TOTP"), and resuming at the exact step that's missing rather
+than guessing. Verified live for all three interrupted states:
+email-only → resumes at `PASSWORD_SETUP`; email+password → resumes at
+`TOTP_ENROLLMENT` (with a fresh secret — the old one was never
+activated); all three done → normal `SELECT_MFA_METHOD`.
+
 ---
 
 ## Why this shape
@@ -103,9 +130,15 @@ Four requirements, each with a reason it's modeled the way it is:
 
 | Field | Type | Notes |
 |---|---|---|
-| emailVerifiedAt | DateTime? | Set once, when the admin's real (non-bootstrap) email is confirmed. Null is the signal that first-login setup hasn't completed |
+| emailVerifiedAt | DateTime? | Set once, when the admin's real (non-bootstrap) email is confirmed |
+| passwordSetAt | DateTime? | Set once the bootstrap password is replaced. Tracked as its own flag — `emailVerifiedAt` + `totpConfirmedAt` alone can't tell "needs password" apart from "needs TOTP," which `/admin/login`'s resume logic needs to know |
 | totpSecret | String? | Base32 TOTP secret, **encrypted at rest**. Written at enrollment time, before confirmation |
 | totpConfirmedAt | DateTime? | Set only after the admin proves they can generate a valid code |
+
+`emailVerifiedAt`/`passwordSetAt`/`totpConfirmedAt` together are a
+3-state resume cursor for `/admin/login`: whichever is the *first*
+missing one (in that order) is where the next login resumes, not a
+restart from scratch and not a fall-through to normal login.
 
 ### `AdminAuthChallenge`
 
@@ -155,8 +188,14 @@ POST /admin/login { email: "admin", password: "admin" }
 - Verify `passwordHash`.
 - `emailVerifiedAt` is null → create an `AdminAuthChallenge`
   (`type: EMAIL_VERIFICATION`, `method: EMAIL`, no code yet — there's
-  nowhere to send one until the next step).
+  nowhere to send one until the next step), and invalidate any other
+  still-live setup challenge for this user (closes the account-takeover
+  race described in Implementation status — the bootstrap credential
+  is shared by design, so only the *latest* login's chain may proceed).
 - Respond `{ challengeToken, step: "SET_EMAIL" }`.
+- If setup was interrupted *after* this step, login resumes at
+  whichever of `passwordSetAt`/`totpConfirmedAt` is still missing
+  instead of restarting here — see step 5.
 
 ```
 POST /admin/setup/email { challengeToken, email }
@@ -219,9 +258,19 @@ POST /admin/totp/confirm { challengeToken, code }
 POST /admin/login { email, password }
 ```
 Now `email` is the real address and `password` is the one set in step
-3. Both `emailVerifiedAt` and `totpConfirmedAt` are set, so this skips
-straight past setup:
-- Create an `AdminAuthChallenge` (`type: LOGIN_MFA`, `method: null`).
+3. `/admin/login` checks three flags, in order, and resumes at the
+first one that's missing — not a restart from `SET_EMAIL` and not a
+fall-through to normal login:
+
+| Missing | Resumes at |
+|---|---|
+| `emailVerifiedAt` | `SET_EMAIL` (step 2) |
+| `passwordSetAt` | `PASSWORD_SETUP` directly (step 3 — a fresh challenge, not through email again) |
+| `totpConfirmedAt` | `TOTP_ENROLLMENT` directly (step 4 — a fresh secret, the old one was never activated) |
+| none missing | `LOGIN_MFA`, below |
+
+All three set → create an `AdminAuthChallenge` (`type: LOGIN_MFA`,
+`method: null`).
 - Respond `{ challengeToken, step: "SELECT_MFA_METHOD",
   availableMethods: ["EMAIL", "TOTP"] }`.
 
@@ -339,7 +388,9 @@ web UI.
 - **Remembering a preferred MFA method** across logins.
 - **Multiple admins.** The seed script's "fail if one already exists"
   guard assumes a single admin — revisit when a second is needed.
-- **Resetting a stuck setup flow** (e.g. the admin wants to restart
-  from `SET_EMAIL` after already reaching `PASSWORD_SETUP`) — currently
-  requires waiting for the in-progress challenge to expire (up to 30
-  min) rather than an explicit "start over" endpoint.
+- **Explicitly restarting from `SET_EMAIL`** if the admin typo'd their
+  real email and already moved past it (e.g. into `PASSWORD_SETUP`) —
+  not the same as the resume logic above, which correctly continues an
+  *interrupted* setup but has no reason to suspect the email itself was
+  wrong. Would need its own "start over" endpoint; current workaround
+  is waiting for the in-progress challenge to expire (up to 30 min).

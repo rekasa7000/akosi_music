@@ -56,9 +56,15 @@ model User {
   passwordHash String?
   // Admin MFA (docs/12-admin-authentication.md). emailVerifiedAt is a
   // one-time gate, set on first successful email verification.
-  // totpSecret is encrypted at rest and written at enrollment time,
-  // before confirmation — totpConfirmedAt is what says it's trusted.
+  // passwordSetAt is set once the bootstrap password is replaced —
+  // tracked separately from emailVerifiedAt/totpConfirmedAt so a login
+  // interrupted mid-setup can resume at the exact right step instead
+  // of re-deriving it from two flags that don't uniquely determine
+  // which step is next. totpSecret is encrypted at rest and written at
+  // enrollment time, before confirmation — totpConfirmedAt is what
+  // says it's trusted.
   emailVerifiedAt DateTime?
+  passwordSetAt   DateTime?
   totpSecret      String?
   totpConfirmedAt DateTime?
   createdAt    DateTime @default(now())

@@ -6,6 +6,7 @@ import { prisma } from "@akosi/database";
 import {
   beginAccountSetup,
   submitSetupEmail,
+  completeEmailVerification,
   createPasswordSetupChallenge,
   consumePasswordSetupChallenge,
   createTotpEnrollmentChallenge,
@@ -91,9 +92,29 @@ export async function adminAuthRoutes(app: FastifyInstance) {
         return reply.code(401).send({ error: "Invalid email or password." });
       }
 
+      // Three independent flags, not just emailVerifiedAt — a setup
+      // interrupted partway through must resume at the exact step
+      // that's actually missing, not fall through to ordinary
+      // LOGIN_MFA (which would let a session issue via email-OTP
+      // alone, with TOTP never confirmed) and not restart from
+      // SET_EMAIL either (which would hit "already verified" guards
+      // meant to catch a *stale* challenge, not a legitimate resume).
       if (!user.emailVerifiedAt) {
         const { challengeToken } = await beginAccountSetup(user.id);
         return { step: "SET_EMAIL" as const, challengeToken };
+      }
+      if (!user.passwordSetAt) {
+        const { challengeToken } = await createPasswordSetupChallenge(user.id);
+        return { step: "PASSWORD_SETUP" as const, challengeToken };
+      }
+      if (!user.totpConfirmedAt) {
+        const totp = await createTotpEnrollmentChallenge(user.id, user.email);
+        return {
+          step: "TOTP_ENROLLMENT" as const,
+          challengeToken: totp.challengeToken,
+          qrCodeDataUrl: totp.qrCodeDataUrl,
+          manualEntryKey: totp.manualEntryKey,
+        };
       }
 
       const { challengeToken } = await createLoginMfaChallenge(user.id);
@@ -142,10 +163,8 @@ export async function adminAuthRoutes(app: FastifyInstance) {
       const result = await verifyChallengeCode(challengeToken, code, "EMAIL_VERIFICATION");
       if (!result.ok) return sendChallengeError(reply, result.reason);
 
-      await prisma.user.update({
-        where: { id: result.userId },
-        data: { email: result.pendingEmail!, emailVerifiedAt: new Date() },
-      });
+      const completed = await completeEmailVerification(result.userId, result.pendingEmail!);
+      if (!completed.ok) return sendChallengeError(reply, completed.reason);
 
       const { challengeToken: passwordToken } = await createPasswordSetupChallenge(result.userId);
       return { step: "PASSWORD_SETUP" as const, challengeToken: passwordToken };
