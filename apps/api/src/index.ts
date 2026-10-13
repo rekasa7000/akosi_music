@@ -1,6 +1,7 @@
 import "./env.js";
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
+import fastifyCors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import fastifyRateLimit from "@fastify/rate-limit";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
@@ -15,6 +16,20 @@ import { adminAuthRoutes } from "./routes/admin-auth.js";
 import { requireAdminSession } from "./auth/session.js";
 
 const app = Fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
+
+// apps/web talks to this API cross-origin (different port in dev, a
+// different subdomain in prod) and needs the session cookie to come
+// along — credentials: true plus an explicit origin allowlist (never
+// "*", which the browser rejects alongside credentials anyway).
+// WEB_ORIGIN is comma-separated since Next's dev server falls back to
+// 3001 when 3000 is already taken by something else.
+const webOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000,http://localhost:3001")
+  .split(",")
+  .map((origin) => origin.trim());
+await app.register(fastifyCors, {
+  origin: webOrigins,
+  credentials: true,
+});
 
 await app.register(fastifyCookie);
 await app.register(fastifyJwt, {
