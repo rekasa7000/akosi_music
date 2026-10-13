@@ -7,6 +7,17 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
+    --font-display: var(--font-space-grotesk);
+    /* Akosi brand palette, role-based so it flips with .dark the same
+       way --background/--foreground do, rather than being a fixed
+       dark-only theme. Accent hues stay put between modes; only
+       background/surface/text roles swap. */
+    --color-akosi-bg: var(--akosi-bg);
+    --color-akosi-surface: var(--akosi-surface);
+    --color-akosi-fg: var(--akosi-fg);
+    --color-akosi-muted-fg: var(--akosi-muted-fg);
+    --color-akosi-accent: var(--akosi-accent);
+    --color-akosi-accent-2: var(--akosi-accent-2);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,6 +59,12 @@
 }
 
 :root {
+    --akosi-bg: #f6ece6;
+    --akosi-surface: #fffaf7;
+    --akosi-fg: #241013;
+    --akosi-muted-fg: #8a7570;
+    --akosi-accent: #a83333;
+    --akosi-accent-2: #c85f2e;
     --background: oklch(1 0 0);
     --foreground: oklch(0.141 0.005 285.823);
     --card: oklch(1 0 0);
@@ -83,6 +100,12 @@
 }
 
 .dark {
+    --akosi-bg: #170b0d;
+    --akosi-surface: #3d1220;
+    --akosi-fg: #f6ece6;
+    --akosi-muted-fg: #a8918c;
+    --akosi-accent: #b33b3b;
+    --akosi-accent-2: #e8774a;
     --background: oklch(0.141 0.005 285.823);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.21 0.006 285.885);
@@ -126,4 +149,21 @@
   html {
     @apply font-sans;
     }
+}
+
+/* Slow drift for the admin login's stage-light background — one
+   deliberate ambient moment, not decoration scattered everywhere. */
+@keyframes akosi-drift {
+  0%, 100% { transform: translate(-3%, -2%) scale(1); }
+  50% { transform: translate(3%, 2%) scale(1.06); }
+}
+
+.akosi-stage-light {
+  animation: akosi-drift 24s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .akosi-stage-light {
+    animation: none;
+  }
 }

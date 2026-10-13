@@ -28,3 +28,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Playwright MCP test screenshots (scratch, not meant to be committed)
+.playwright-mcp/

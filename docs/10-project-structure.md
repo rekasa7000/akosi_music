@@ -44,7 +44,9 @@ by the other three.
 - `apps/web` — scaffolded (Next.js + shadcn/ui via `shadcn@latest init
   --base radix --template next`). **Always use shadcn/ui for UI
   components in this app** — pinned in `apps/web/AGENTS.md` (for AI
-  agents) and `08-conventions.md` (Web app section).
+  agents) and `08-conventions.md` (Web app section). Now also has the
+  admin auth UI (`/admin/login`, `/admin`) — see `12-admin-authentication.md`
+  § Web UI.
 - `apps/api` — scaffolded (Fastify + TypeScript, with
   `@fastify/type-provider-typebox` for request/response schema
   validation on every route, per `08-conventions.md`). `src/index.ts`

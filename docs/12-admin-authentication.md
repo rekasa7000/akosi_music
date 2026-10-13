@@ -402,6 +402,38 @@ state itself.
 | `@fastify/jwt` + `@fastify/cookie` | Session issuance/verification |
 | `nodemailer` | Sends verification/OTP emails over SMTP |
 | `@fastify/rate-limit` | Per-route limits on every challenge-code-submitting endpoint |
+| `@fastify/cors` | `apps/web` calls this API cross-origin (different port in dev, a different subdomain in prod) and needs the session cookie to come along — explicit origin allowlist (`WEB_ORIGIN` env, comma-separated) plus `credentials: true` |
+
+## Web UI (`apps/web`)
+
+`/admin/login` renders every step of the flow above as its own form
+(`components/admin/admin-login-flow.tsx`), driven entirely by the
+`step` field each API response returns — the client never infers
+state on its own. `/admin` is the (currently placeholder) dashboard
+behind it. Both talk to the API directly from the browser via
+`lib/admin-api.ts`, a thin `fetch` wrapper that always sends
+`credentials: "include"`.
+
+Styled with a dedicated brand palette (`akosi-bg`/`-surface`/`-fg`/
+`-muted-fg`/`-accent`/`-accent-2`, defined in `globals.css` as
+role-based tokens that flip under `.dark`, the same pattern shadcn's
+own `--background`/`--foreground` already use) rather than the app's
+generic theme — supports both light and dark via the existing
+`next-themes` setup, with a visible toggle, not just the system
+preference. Full design rationale isn't duplicated here; see the
+component files themselves.
+
+Verified live end-to-end with Playwright, not just typechecked: the
+full bootstrap chain (QR scanned conceptually via the manual-entry key
++ a real generated TOTP code), sign-out, repeat login via both EMAIL
+and TOTP, a wrong-password error state, light mode, dark mode, and a
+mobile viewport (390px).
+
+One bug only showed up this way: `/admin/logout` is a bodyless POST,
+but the client always sent `Content-Type: application/json` with no
+body — Fastify's JSON parser rejects that combination with a 400 (not
+a CORS error, easy to misdiagnose as one). Fixed by only setting that
+header when a request actually has a body.
 
 ## Local dev email
 
