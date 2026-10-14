@@ -4,7 +4,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type, type Static } from "typebox";
 import { prisma } from "@akosi/database";
 import type { Prisma } from "@akosi/database";
-import { getUnlockedReleaseIds, grantReleaseUnlock } from "../auth/fan-unlock.js";
+import { isReleaseUnlocked, grantReleaseUnlock } from "../auth/fan-unlock.js";
 import { MEDIA_BUCKET, createPresignedPlaybackUrl } from "../storage.js";
 
 const MediaType = Type.Union([Type.Literal("AUDIO"), Type.Literal("VIDEO")]);
@@ -104,7 +104,7 @@ export async function publicReleaseRoutes(app: FastifyInstance) {
 
       const locked =
         release.visibility === "PRIVATE" &&
-        !getUnlockedReleaseIds(request).includes(release.id);
+        !(release.passwordHash && isReleaseUnlocked(request, release.id, release.passwordHash));
       return serializeRelease(release, locked);
     },
   );
@@ -128,14 +128,12 @@ export async function publicReleaseRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: "Release not found." });
       }
 
-      const passwordOk =
-        release.passwordHash != null &&
-        (await verifyPasswordHash(release.passwordHash, request.body.password));
-      if (!passwordOk) {
+      const { passwordHash } = release;
+      if (!passwordHash || !(await verifyPasswordHash(passwordHash, request.body.password))) {
         return reply.code(401).send({ error: "Incorrect password." });
       }
 
-      await grantReleaseUnlock(app, request, reply, release.id);
+      await grantReleaseUnlock(app, request, reply, release.id, passwordHash);
       return serializeRelease(release, false);
     },
   );

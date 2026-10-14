@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
 import { prisma } from "@akosi/database";
-import { getUnlockedReleaseIds } from "../auth/fan-unlock.js";
+import { isReleaseUnlocked } from "../auth/fan-unlock.js";
 import { MEDIA_BUCKET, createPresignedPlaybackUrl } from "../storage.js";
 
 const PlayResponse = Type.Object({
@@ -37,7 +37,9 @@ export async function publicTrackRoutes(app: FastifyInstance) {
       }
 
       if (track.release.visibility === "PRIVATE") {
-        const unlocked = getUnlockedReleaseIds(request).includes(track.releaseId);
+        const unlocked =
+          track.release.passwordHash &&
+          isReleaseUnlocked(request, track.releaseId, track.release.passwordHash);
         if (!unlocked) {
           return reply.code(403).send({ error: "This release is locked." });
         }
