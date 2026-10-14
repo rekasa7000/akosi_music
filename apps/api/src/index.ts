@@ -26,6 +26,9 @@ const webOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000,http://loca
 await app.register(fastifyCors, {
   origin: webOrigins,
   credentials: true,
+  // @fastify/cors only allows GET,HEAD,POST by default — the catalog
+  // routes also use PATCH, which a browser preflight otherwise rejects.
+  methods: ["GET", "HEAD", "POST", "PATCH"],
 });
 
 await app.register(fastifyCookie);
