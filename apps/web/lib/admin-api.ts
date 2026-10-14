@@ -36,6 +36,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
+    // A 401 on anything but the login/me routes means a previously
+    // valid session died (expiry, logout elsewhere) mid-use — send the
+    // admin back to re-authenticate rather than show a dead-end error.
+    if (res.status === 401 && path !== "/admin/login" && path !== "/admin/me") {
+      if (typeof window !== "undefined" && window.location.pathname !== "/admin/login") {
+        window.location.href = "/admin/login";
+      }
+    }
     throw new AdminApiError(body?.error ?? "Something went wrong.");
   }
   return body as T;
@@ -96,4 +104,134 @@ export function logout() {
 
 export function me() {
   return request<{ email: string; role: string }>("/admin/me");
+}
+
+// --- Catalog (artists / releases / tracks / media) ---
+// docs/11-mvp-phase0.md — mirrors apps/api's admin-artists/releases/tracks/media routes.
+
+export type Artist = {
+  id: string;
+  name: string;
+  slug: string;
+  bio: string | null;
+  createdAt: string;
+};
+
+export type Visibility = "PUBLIC" | "PRIVATE";
+
+export type MediaType = "AUDIO" | "VIDEO";
+
+export type TrackSummary = {
+  id: string;
+  title: string;
+  trackNumber: number | null;
+  mediaType: MediaType;
+  status: string;
+  coverImageKey: string | null;
+};
+
+export type Release = {
+  id: string;
+  artistId: string;
+  title: string;
+  releasedAt: string | null;
+  visibility: Visibility;
+  coverImageKey: string | null;
+  createdAt: string;
+};
+
+export type ReleaseWithTracks = Release & { tracks: TrackSummary[] };
+
+export type Track = {
+  id: string;
+  releaseId: string;
+  title: string;
+  trackNumber: number | null;
+  durationSec: number | null;
+  mediaType: MediaType;
+  lyrics: string | null;
+  coverImageKey: string | null;
+  status: string;
+  createdAt: string;
+};
+
+export type MediaUploadPurpose = "release-cover" | "track-cover" | "track-audio" | "track-video";
+
+export function listArtists() {
+  return request<Artist[]>("/admin/artists");
+}
+
+export function createArtist(params: { name: string; slug: string; bio?: string }) {
+  return request<Artist>("/admin/artists", { method: "POST", body: JSON.stringify(params) });
+}
+
+export function listReleases() {
+  return request<Release[]>("/admin/releases");
+}
+
+export function getRelease(id: string) {
+  return request<ReleaseWithTracks>(`/admin/releases/${id}`);
+}
+
+export function createRelease(params: { artistId: string; title: string; releasedAt?: string }) {
+  return request<Release>("/admin/releases", { method: "POST", body: JSON.stringify(params) });
+}
+
+export function updateRelease(
+  id: string,
+  params: {
+    title?: string;
+    releasedAt?: string;
+    visibility?: Visibility;
+    password?: string;
+    coverImageKey?: string;
+  },
+) {
+  return request<Release>(`/admin/releases/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(params),
+  });
+}
+
+export function createTrack(
+  releaseId: string,
+  params: {
+    title: string;
+    mediaType: MediaType;
+    rawStorageKey: string;
+    trackNumber?: number;
+    durationSec?: number;
+    lyrics?: string;
+    coverImageKey?: string;
+  },
+) {
+  return request<Track>(`/admin/releases/${releaseId}/tracks`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export function updateTrack(
+  id: string,
+  params: { title?: string; trackNumber?: number; lyrics?: string; coverImageKey?: string },
+) {
+  return request<Track>(`/admin/tracks/${id}`, { method: "PATCH", body: JSON.stringify(params) });
+}
+
+function presignMedia(purpose: MediaUploadPurpose, contentType: string) {
+  return request<{ key: string; uploadUrl: string }>("/admin/media/presign", {
+    method: "POST",
+    body: JSON.stringify({ purpose, contentType }),
+  });
+}
+
+// Presigns then PUTs directly to the storage bucket — the file itself
+// never passes through this app's own server, only through the browser.
+export async function uploadMedia(purpose: MediaUploadPurpose, file: File): Promise<string> {
+  const { key, uploadUrl } = await presignMedia(purpose, file.type);
+  const res = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  if (!res.ok) {
+    throw new AdminApiError("Upload failed. Please try again.");
+  }
+  return key;
 }
