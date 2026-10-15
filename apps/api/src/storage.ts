@@ -117,7 +117,9 @@ export type MediaUploadPurpose =
   | "release-cover"
   | "track-cover"
   | "track-audio"
-  | "track-video";
+  | "track-video"
+  | "artist-profile"
+  | "artist-cover";
 
 export function generateUploadKey(purpose: MediaUploadPurpose): string {
   return `raw/${purpose}/${randomUUID()}`;

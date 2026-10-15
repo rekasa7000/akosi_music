@@ -10,6 +10,8 @@ const Purpose = Type.Union([
   Type.Literal("track-cover"),
   Type.Literal("track-audio"),
   Type.Literal("track-video"),
+  Type.Literal("artist-profile"),
+  Type.Literal("artist-cover"),
 ]);
 
 const CONTENT_TYPE_PATTERN: Record<MediaUploadPurpose, string> = {
@@ -17,6 +19,8 @@ const CONTENT_TYPE_PATTERN: Record<MediaUploadPurpose, string> = {
   "track-cover": "^image/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
   "track-audio": "^audio/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
   "track-video": "^video/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
+  "artist-profile": "^image/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
+  "artist-cover": "^image/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
 };
 
 export async function adminMediaRoutes(app: FastifyInstance) {
