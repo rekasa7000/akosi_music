@@ -3,12 +3,24 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
 import { Prisma, prisma } from "@akosi/database";
 import { requireAdminSession } from "../auth/session.js";
+import {
+  promoteRawUploadToMedia,
+  keyMatchesPurpose,
+  UploadNotFoundError,
+  MEDIA_BUCKET,
+  createPresignedPlaybackUrl,
+} from "../storage.js";
 
 const Artist = Type.Object({
   id: Type.String(),
   name: Type.String(),
   slug: Type.String(),
   bio: Type.Union([Type.String(), Type.Null()]),
+  profileImageUrl: Type.Union([Type.String(), Type.Null()]),
+  coverImageUrl: Type.Union([Type.String(), Type.Null()]),
+  websiteUrl: Type.Union([Type.String(), Type.Null()]),
+  instagramUrl: Type.Union([Type.String(), Type.Null()]),
+  twitterUrl: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String(),
 });
 
@@ -17,6 +29,37 @@ const ErrorResponse = Type.Object({ error: Type.String() });
 // A-z, 0-9, single hyphens between segments — matches how the slug
 // shows up in a URL later (docs/09-data-model.md: Artist.slug unique).
 const SLUG_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
+
+async function resolveImageUrl(key: string | null): Promise<string | null> {
+  if (!key) return null;
+  return createPresignedPlaybackUrl({ bucket: MEDIA_BUCKET, key });
+}
+
+async function serializeArtist(artist: {
+  id: string;
+  name: string;
+  slug: string;
+  bio: string | null;
+  profileImageKey: string | null;
+  coverImageKey: string | null;
+  websiteUrl: string | null;
+  instagramUrl: string | null;
+  twitterUrl: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: artist.id,
+    name: artist.name,
+    slug: artist.slug,
+    bio: artist.bio,
+    profileImageUrl: await resolveImageUrl(artist.profileImageKey),
+    coverImageUrl: await resolveImageUrl(artist.coverImageKey),
+    websiteUrl: artist.websiteUrl,
+    instagramUrl: artist.instagramUrl,
+    twitterUrl: artist.twitterUrl,
+    createdAt: artist.createdAt.toISOString(),
+  };
+}
 
 const ArtistTrack = Type.Object({
   id: Type.String(),
@@ -36,7 +79,20 @@ const ArtistRelease = Type.Object({
   tracks: Type.Array(ArtistTrack),
 });
 
-const ArtistDetail = Type.Intersect([Artist, Type.Object({ releases: Type.Array(ArtistRelease) })]);
+const ArtistDetail = Type.Intersect([
+  Artist,
+  Type.Object({
+    totalPlays: Type.Integer(),
+    releaseCount: Type.Integer(),
+    trackCount: Type.Integer(),
+    releases: Type.Array(ArtistRelease),
+  }),
+]);
+
+// Website/social fields take a bare URL — require a scheme so the
+// stored value is always directly usable as an href, never something
+// that silently resolves relative to this app's own origin.
+const UrlField = Type.String({ format: "uri", maxLength: 300 });
 
 export async function adminArtistRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<TypeBoxTypeProvider>();
@@ -58,7 +114,7 @@ export async function adminArtistRoutes(app: FastifyInstance) {
       const { name, slug, bio } = request.body;
       try {
         const artist = await prisma.artist.create({ data: { name, slug, bio } });
-        return { ...artist, createdAt: artist.createdAt.toISOString() };
+        return serializeArtist(artist);
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
           return reply.code(409).send({ error: "An artist with that slug already exists." });
@@ -78,7 +134,7 @@ export async function adminArtistRoutes(app: FastifyInstance) {
     },
     async () => {
       const artists = await prisma.artist.findMany({ orderBy: { createdAt: "desc" } });
-      return artists.map((artist) => ({ ...artist, createdAt: artist.createdAt.toISOString() }));
+      return Promise.all(artists.map(serializeArtist));
     },
   );
 
@@ -116,13 +172,13 @@ export async function adminArtistRoutes(app: FastifyInstance) {
       const playCountByTrack = new Map(playCounts.map((p) => [p.trackId, p._count]));
       const cardCountByTrack = new Map(activeCardCounts.map((c) => [c.trackId!, c._count]));
       const everHadCardTrackIds = new Set(everCardCounts.map((c) => c.trackId!));
+      const totalPlays = playCounts.reduce((sum, p) => sum + p._count, 0);
 
       return {
-        id: artist.id,
-        name: artist.name,
-        slug: artist.slug,
-        bio: artist.bio,
-        createdAt: artist.createdAt.toISOString(),
+        ...(await serializeArtist(artist)),
+        totalPlays,
+        releaseCount: artist.releases.length,
+        trackCount: trackIds.length,
         releases: artist.releases.map((release) => ({
           id: release.id,
           title: release.title,
@@ -139,6 +195,62 @@ export async function adminArtistRoutes(app: FastifyInstance) {
           })),
         })),
       };
+    },
+  );
+
+  typedApp.patch(
+    "/admin/artists/:id",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: Type.Object({
+          bio: Type.Optional(Type.String({ maxLength: 2000 })),
+          websiteUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
+          instagramUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
+          twitterUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
+          profileImageKey: Type.Optional(Type.String()),
+          coverImageKey: Type.Optional(Type.String()),
+        }),
+        response: { 200: Artist, 400: ErrorResponse, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      const existing = await prisma.artist.findUnique({ where: { id: request.params.id } });
+      if (!existing) {
+        return reply.code(404).send({ error: "Artist not found." });
+      }
+
+      const { bio, websiteUrl, instagramUrl, twitterUrl, profileImageKey, coverImageKey } = request.body;
+      const data: Parameters<typeof prisma.artist.update>[0]["data"] = {};
+
+      if (bio !== undefined) data.bio = bio;
+      if (websiteUrl !== undefined) data.websiteUrl = websiteUrl;
+      if (instagramUrl !== undefined) data.instagramUrl = instagramUrl;
+      if (twitterUrl !== undefined) data.twitterUrl = twitterUrl;
+
+      for (const [key, purpose] of [
+        [profileImageKey, "artist-profile"],
+        [coverImageKey, "artist-cover"],
+      ] as const) {
+        if (key === undefined) continue;
+        if (!keyMatchesPurpose(key, purpose)) {
+          return reply.code(400).send({ error: `This doesn't look like a presigned ${purpose} upload.` });
+        }
+        try {
+          await promoteRawUploadToMedia(key);
+        } catch (err) {
+          if (err instanceof UploadNotFoundError) {
+            return reply.code(400).send({ error: err.message });
+          }
+          throw err;
+        }
+      }
+      if (profileImageKey !== undefined) data.profileImageKey = profileImageKey;
+      if (coverImageKey !== undefined) data.coverImageKey = coverImageKey;
+
+      const artist = await prisma.artist.update({ where: { id: existing.id }, data });
+      return serializeArtist(artist);
     },
   );
 }
