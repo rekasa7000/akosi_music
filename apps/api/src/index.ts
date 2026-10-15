@@ -11,8 +11,11 @@ import { adminArtistRoutes } from "./routes/admin-artists.js";
 import { adminReleaseRoutes } from "./routes/admin-releases.js";
 import { adminTrackRoutes } from "./routes/admin-tracks.js";
 import { adminMediaRoutes } from "./routes/admin-media.js";
+import { adminCardRoutes } from "./routes/admin-cards.js";
+import { adminStatsRoutes } from "./routes/admin-stats.js";
 import { publicReleaseRoutes } from "./routes/public-releases.js";
 import { publicTrackRoutes } from "./routes/public-tracks.js";
+import { publicCardRoutes } from "./routes/public-cards.js";
 
 const app = Fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -58,8 +61,11 @@ await app.register(adminArtistRoutes);
 await app.register(adminReleaseRoutes);
 await app.register(adminTrackRoutes);
 await app.register(adminMediaRoutes);
+await app.register(adminCardRoutes);
+await app.register(adminStatsRoutes);
 await app.register(publicReleaseRoutes);
 await app.register(publicTrackRoutes);
+await app.register(publicCardRoutes);
 
 const port = Number(process.env.PORT ?? 4000);
 
