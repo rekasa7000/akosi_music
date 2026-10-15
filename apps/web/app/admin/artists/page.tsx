@@ -47,8 +47,13 @@ export default function ArtistsPage() {
                 href={`/admin/artists/${artist.id}`}
                 className="flex items-center gap-3 rounded-xl border border-akosi-fg/10 bg-akosi-surface p-4 transition-colors hover:bg-akosi-fg/5"
               >
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-akosi-accent to-akosi-accent-2 text-sm font-medium text-white">
-                  {initials(artist.name)}
+                <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-akosi-accent to-akosi-accent-2 text-sm font-medium text-white">
+                  {artist.profileImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={artist.profileImageUrl} alt="" className="size-full object-cover" />
+                  ) : (
+                    initials(artist.name)
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-medium">{artist.name}</p>
