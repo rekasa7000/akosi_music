@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
 import { prisma } from "@akosi/database";
-import { isReleaseUnlocked } from "../auth/fan-unlock.js";
+import { getUnlockCardId, isTrackUnlocked } from "../auth/fan-unlock.js";
 import { MEDIA_BUCKET, createPresignedPlaybackUrl } from "../storage.js";
 
 const PlayResponse = Type.Object({
@@ -30,19 +30,18 @@ export async function publicTrackRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const track = await prisma.track.findUnique({
         where: { id: request.params.id },
-        include: { release: true },
+        include: { cards: true },
       });
       if (!track || track.status !== "READY") {
         return reply.code(404).send({ error: "Track not found." });
       }
 
-      if (track.release.visibility === "PRIVATE") {
-        const unlocked =
-          track.release.passwordHash &&
-          isReleaseUnlocked(request, track.releaseId, track.release.passwordHash);
-        if (!unlocked) {
-          return reply.code(403).send({ error: "This release is locked." });
-        }
+      const activeCardIds = track.cards.filter((c) => c.status !== "REVOKED").map((c) => c.id);
+      // Gated by *ever* having had a card, not by currently having an
+      // active one — see the matching note in public-releases.ts.
+      const gated = track.cards.length > 0;
+      if (gated && !isTrackUnlocked(request, track.id, activeCardIds)) {
+        return reply.code(403).send({ error: "This track is locked." });
       }
 
       const key = track.processedStorageKey ?? track.rawStorageKey;
@@ -51,7 +50,11 @@ export async function publicTrackRoutes(app: FastifyInstance) {
       }
 
       const url = await createPresignedPlaybackUrl({ bucket: MEDIA_BUCKET, key });
-      await prisma.playEvent.create({ data: { trackId: track.id } });
+      // Attributes the play to whichever card actually unlocked this
+      // track in this request, if any — null for a track with no
+      // cards (still public).
+      const cardId = getUnlockCardId(request, track.id);
+      await prisma.playEvent.create({ data: { trackId: track.id, cardId } });
 
       return { url, mediaType: track.mediaType as "AUDIO" | "VIDEO" };
     },
