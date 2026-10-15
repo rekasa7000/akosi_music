@@ -1,12 +1,9 @@
-import { hash } from "argon2";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
 import { prisma } from "@akosi/database";
 import { requireAdminSession } from "../auth/session.js";
 import { promoteRawUploadToMedia, keyMatchesPurpose, UploadNotFoundError } from "../storage.js";
-
-const Visibility = Type.Union([Type.Literal("PUBLIC"), Type.Literal("PRIVATE")]);
 
 const Track = Type.Object({
   id: Type.String(),
@@ -15,6 +12,8 @@ const Track = Type.Object({
   mediaType: Type.String(),
   status: Type.String(),
   coverImageKey: Type.Union([Type.String(), Type.Null()]),
+  cardCount: Type.Integer(),
+  locked: Type.Boolean(),
 });
 
 const Release = Type.Object({
@@ -22,7 +21,6 @@ const Release = Type.Object({
   artistId: Type.String(),
   title: Type.String(),
   releasedAt: Type.Union([Type.String(), Type.Null()]),
-  visibility: Visibility,
   coverImageKey: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String(),
 });
@@ -36,7 +34,6 @@ function serializeRelease(release: {
   artistId: string;
   title: string;
   releasedAt: Date | null;
-  visibility: string;
   coverImageKey: string | null;
   createdAt: Date;
 }) {
@@ -45,7 +42,6 @@ function serializeRelease(release: {
     artistId: release.artistId,
     title: release.title,
     releasedAt: release.releasedAt?.toISOString() ?? null,
-    visibility: release.visibility as "PUBLIC" | "PRIVATE",
     coverImageKey: release.coverImageKey,
     createdAt: release.createdAt.toISOString(),
   };
@@ -104,7 +100,9 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const release = await prisma.release.findUnique({
         where: { id: request.params.id },
-        include: { tracks: { orderBy: { trackNumber: "asc" } } },
+        include: {
+          tracks: { include: { cards: true }, orderBy: { trackNumber: "asc" } },
+        },
       });
       if (!release) {
         return reply.code(404).send({ error: "Release not found." });
@@ -118,6 +116,11 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
           mediaType: track.mediaType,
           status: track.status,
           coverImageKey: track.coverImageKey,
+          // Active (redeemable) card count, not the same as "locked":
+          // a track with only revoked cards stays locked but shows 0
+          // here, signaling "needs a new card," not "is public."
+          cardCount: track.cards.filter((c) => c.status !== "REVOKED").length,
+          locked: track.cards.length > 0,
         })),
       };
     },
@@ -132,8 +135,6 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
         body: Type.Object({
           title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
           releasedAt: Type.Optional(Type.String({ format: "date-time" })),
-          visibility: Type.Optional(Visibility),
-          password: Type.Optional(Type.String({ minLength: 6, maxLength: 200 })),
           coverImageKey: Type.Optional(Type.String()),
         }),
         response: { 200: Release, 400: ErrorResponse, 404: ErrorResponse },
@@ -145,24 +146,11 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: "Release not found." });
       }
 
-      const { title, releasedAt, visibility, password, coverImageKey } = request.body;
+      const { title, releasedAt, coverImageKey } = request.body;
       const data: Parameters<typeof prisma.release.update>[0]["data"] = {};
 
       if (title !== undefined) data.title = title;
       if (releasedAt !== undefined) data.releasedAt = new Date(releasedAt);
-
-      const visibilityResult = resolveVisibility({
-        requestedVisibility: visibility,
-        password,
-        alreadyHasPassword: existing.passwordHash != null,
-      });
-      if (!visibilityResult.ok) {
-        return reply.code(400).send({ error: visibilityResult.error });
-      }
-      Object.assign(data, visibilityResult.data);
-      if (password) {
-        data.passwordHash = await hash(password);
-      }
 
       if (coverImageKey !== undefined) {
         if (!keyMatchesPurpose(coverImageKey, "release-cover")) {
@@ -183,31 +171,4 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
       return serializeRelease(release);
     },
   );
-}
-
-type VisibilityResolution =
-  | { ok: true; data: { visibility?: "PUBLIC" | "PRIVATE"; passwordHash?: null } }
-  | { ok: false; error: string };
-
-// A password implies PRIVATE regardless of what visibility says, and
-// PUBLIC always clears any stored password — the two fields shouldn't
-// be able to drift out of sync with each other.
-function resolveVisibility(params: {
-  requestedVisibility?: "PUBLIC" | "PRIVATE";
-  password?: string;
-  alreadyHasPassword: boolean;
-}): VisibilityResolution {
-  if (params.password) {
-    return { ok: true, data: { visibility: "PRIVATE" } };
-  }
-  if (params.requestedVisibility === "PUBLIC") {
-    return { ok: true, data: { visibility: "PUBLIC", passwordHash: null } };
-  }
-  if (params.requestedVisibility === "PRIVATE") {
-    if (!params.alreadyHasPassword) {
-      return { ok: false, error: "A private release needs a password." };
-    }
-    return { ok: true, data: { visibility: "PRIVATE" } };
-  }
-  return { ok: true, data: {} };
 }
