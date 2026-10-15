@@ -114,6 +114,11 @@ export type Artist = {
   name: string;
   slug: string;
   bio: string | null;
+  profileImageUrl: string | null;
+  coverImageUrl: string | null;
+  websiteUrl: string | null;
+  instagramUrl: string | null;
+  twitterUrl: string | null;
   createdAt: string;
 };
 
@@ -157,7 +162,13 @@ export type Track = {
   createdAt: string;
 };
 
-export type MediaUploadPurpose = "release-cover" | "track-cover" | "track-audio" | "track-video";
+export type MediaUploadPurpose =
+  | "release-cover"
+  | "track-cover"
+  | "track-audio"
+  | "track-video"
+  | "artist-profile"
+  | "artist-cover";
 
 export function listArtists() {
   return request<Artist[]>("/admin/artists");
@@ -282,10 +293,32 @@ export type ArtistReleaseSummary = {
   tracks: ArtistTrack[];
 };
 
-export type ArtistDetail = Artist & { releases: ArtistReleaseSummary[] };
+export type ArtistDetail = Artist & {
+  totalPlays: number;
+  releaseCount: number;
+  trackCount: number;
+  releases: ArtistReleaseSummary[];
+};
 
 export function getArtist(id: string) {
   return request<ArtistDetail>(`/admin/artists/${encodeURIComponent(id)}`);
+}
+
+export function updateArtist(
+  id: string,
+  params: {
+    bio?: string;
+    websiteUrl?: string | null;
+    instagramUrl?: string | null;
+    twitterUrl?: string | null;
+    profileImageKey?: string;
+    coverImageKey?: string;
+  },
+) {
+  return request<Artist>(`/admin/artists/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(params),
+  });
 }
 
 // --- Cards (Phase 0.5 manual provisioning, docs/11-mvp-phase0.md) ---
