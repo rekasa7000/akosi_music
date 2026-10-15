@@ -5,14 +5,30 @@ import { CameraIcon, ImagePlusIcon, Loader2Icon } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { cn } from "@/lib/utils";
 
+const SIZE_CLASSES = { lg: "max-w-64", sm: "max-w-36", xs: "max-w-28" } as const;
+const ASPECT_CLASSES = { square: "aspect-square", banner: "aspect-[3/1]" } as const;
+
 export function CoverUploader({
-  currentKey,
+  purpose,
+  currentKey = null,
+  currentUrl = null,
   onUploaded,
   size = "lg",
+  aspect = "square",
+  shape = "rounded",
 }: {
-  currentKey: string | null;
+  purpose: api.MediaUploadPurpose;
+  // Raw storage key — release/track covers only have this (no
+  // resolved URL from those endpoints yet), so it's just a "there's
+  // something uploaded" signal behind a generic placeholder.
+  currentKey?: string | null;
+  // A presigned URL ready to render directly — when provided, shows
+  // the real existing image instead of the placeholder.
+  currentUrl?: string | null;
   onUploaded: (key: string) => Promise<void>;
-  size?: "lg" | "sm";
+  size?: "lg" | "sm" | "xs";
+  aspect?: "square" | "banner";
+  shape?: "rounded" | "circle";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
@@ -30,7 +46,7 @@ export function CoverUploader({
     setError(null);
     setBusy(true);
     try {
-      const key = await api.uploadMedia("release-cover", file);
+      const key = await api.uploadMedia(purpose, file);
       await onUploaded(key);
     } catch (err) {
       setError(err instanceof api.AdminApiError ? err.message : "Upload failed.");
@@ -46,10 +62,11 @@ export function CoverUploader({
     if (file) void handleFile(file);
   }
 
-  const hasImage = Boolean(previewUrl);
+  const displayUrl = previewUrl ?? currentUrl;
+  const hasExisting = Boolean(displayUrl) || Boolean(currentKey);
 
   return (
-    <div className={size === "lg" ? "w-full max-w-64" : "w-full max-w-36"}>
+    <div className={cn("w-full", SIZE_CLASSES[size], aspect === "banner" && "max-w-none")}>
       <input
         ref={inputRef}
         type="file"
@@ -70,16 +87,18 @@ export function CoverUploader({
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         className={cn(
-          "group relative aspect-square w-full overflow-hidden rounded-lg border transition-colors",
+          "group relative w-full overflow-hidden border transition-colors",
+          shape === "circle" ? "rounded-full" : "rounded-lg",
+          ASPECT_CLASSES[aspect],
           dragging
             ? "border-akosi-accent-2 bg-akosi-accent-2/10"
             : "border-dashed border-akosi-fg/20 bg-akosi-surface hover:border-akosi-fg/35",
-          hasImage && "border-solid border-akosi-fg/10",
+          hasExisting && "border-solid border-akosi-fg/10",
         )}
       >
-        {previewUrl ? (
+        {displayUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={previewUrl} alt="" className="size-full object-cover" />
+          <img src={displayUrl} alt="" className="size-full object-cover" />
         ) : currentKey ? (
           <div className="flex size-full flex-col items-center justify-center gap-2 bg-linear-to-br from-akosi-accent/25 to-akosi-accent-2/25 text-akosi-muted-fg">
             <ImagePlusIcon className={size === "lg" ? "size-8" : "size-5"} strokeWidth={1.5} />
@@ -105,7 +124,7 @@ export function CoverUploader({
           ) : (
             <div className="flex flex-col items-center gap-1.5 text-white">
               <CameraIcon className="size-5" />
-              <span className="text-xs font-medium">{hasImage || currentKey ? "Replace" : "Upload"}</span>
+              <span className="text-xs font-medium">{hasExisting ? "Replace" : "Upload"}</span>
             </div>
           )}
         </div>

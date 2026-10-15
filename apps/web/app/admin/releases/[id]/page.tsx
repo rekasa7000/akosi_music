@@ -74,6 +74,7 @@ export default function ReleaseDetailPage() {
 
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-[18rem_1fr]">
             <CoverUploader
+              purpose="release-cover"
               currentKey={release.coverImageKey}
               onUploaded={async (coverImageKey) => {
                 const updated = await api.updateRelease(release.id, { coverImageKey });
