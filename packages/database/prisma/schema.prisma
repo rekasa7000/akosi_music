@@ -167,16 +167,30 @@ model Track {
 
   release    Release     @relation(fields: [releaseId], references: [id])
   playEvents PlayEvent[]
+  cards      Card[]
 
   @@map("tracks")
 }
 
 model Card {
   id              String     @id @default(cuid())
+  // Phase 0.5: cards are manufactured manually, so there's no real
+  // NFC UID to read yet — uid doubles as the code the admin types in
+  // when provisioning the card and that a fan enters (or that's baked
+  // into the tap URL printed/encoded on the card) to redeem it. Real
+  // NFC auth replaces what proves possession of this value, not the
+  // value's role (see docs/11-mvp-phase0.md's convergence table).
   uid             String     @unique
   artistId        String
-  // null = Artist Card, set = Music Card
+  // null = Artist Card (unused by Phase 0.5's manual flow, reserved
+  // for a future album-level card).
   releaseId       String?
+  // Set = Music Card for one track — the Phase 0.5 case: a track with
+  // at least one non-REVOKED card pointing at it is private, and any
+  // of those cards' uid unlocks it. Multiple cards can point at the
+  // same track (editionLabel distinguishes them) so a limited run of
+  // physical variants can all redeem the same song.
+  trackId         String?
   status          CardStatus @default(UNCLAIMED)
   lastSeenCounter Int        @default(0)
   editionLabel    String?
@@ -186,6 +200,7 @@ model Card {
 
   artist    Artist         @relation(fields: [artistId], references: [id])
   release   Release?       @relation(fields: [releaseId], references: [id])
+  track     Track?         @relation(fields: [trackId], references: [id])
   ownership CardOwnership?
   playEvents PlayEvent[]
 
