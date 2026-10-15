@@ -172,7 +172,7 @@ export function listReleases() {
 }
 
 export function getRelease(id: string) {
-  return request<ReleaseWithTracks>(`/admin/releases/${id}`);
+  return request<ReleaseWithTracks>(`/admin/releases/${encodeURIComponent(id)}`);
 }
 
 export function createRelease(params: { artistId: string; title: string; releasedAt?: string }) {
@@ -183,7 +183,7 @@ export function updateRelease(
   id: string,
   params: { title?: string; releasedAt?: string; coverImageKey?: string },
 ) {
-  return request<Release>(`/admin/releases/${id}`, {
+  return request<Release>(`/admin/releases/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(params),
   });
@@ -201,7 +201,7 @@ export function createTrack(
     coverImageKey?: string;
   },
 ) {
-  return request<Track>(`/admin/releases/${releaseId}/tracks`, {
+  return request<Track>(`/admin/releases/${encodeURIComponent(releaseId)}/tracks`, {
     method: "POST",
     body: JSON.stringify(params),
   });
@@ -223,7 +223,10 @@ export function updateTrack(
   id: string,
   params: { title?: string; trackNumber?: number; lyrics?: string; coverImageKey?: string },
 ) {
-  return request<Track>(`/admin/tracks/${id}`, { method: "PATCH", body: JSON.stringify(params) });
+  return request<Track>(`/admin/tracks/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(params),
+  });
 }
 
 function presignMedia(purpose: MediaUploadPurpose, contentType: string) {
@@ -282,7 +285,7 @@ export type ArtistReleaseSummary = {
 export type ArtistDetail = Artist & { releases: ArtistReleaseSummary[] };
 
 export function getArtist(id: string) {
-  return request<ArtistDetail>(`/admin/artists/${id}`);
+  return request<ArtistDetail>(`/admin/artists/${encodeURIComponent(id)}`);
 }
 
 // --- Cards (Phase 0.5 manual provisioning, docs/11-mvp-phase0.md) ---
@@ -313,5 +316,8 @@ export function createCard(params: { uid: string; trackId: string; editionLabel?
 }
 
 export function updateCard(id: string, params: { status?: CardStatus; editionLabel?: string }) {
-  return request<Card>(`/admin/cards/${id}`, { method: "PATCH", body: JSON.stringify(params) });
+  return request<Card>(`/admin/cards/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(params),
+  });
 }

@@ -61,7 +61,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function getRelease(id: string) {
-  return request<PublicRelease>(`/releases/${id}`);
+  return request<PublicRelease>(`/releases/${encodeURIComponent(id)}`);
 }
 
 // Redeeming a card is how a track goes from locked to playable — via
@@ -72,5 +72,5 @@ export function redeemCard(uid: string) {
 }
 
 export function getTrackPlayUrl(id: string) {
-  return request<PlayResponse>(`/tracks/${id}/play`);
+  return request<PlayResponse>(`/tracks/${encodeURIComponent(id)}/play`);
 }
