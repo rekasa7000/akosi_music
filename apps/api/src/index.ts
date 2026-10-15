@@ -37,9 +37,18 @@ await app.register(fastifyCors, {
 });
 
 await app.register(fastifyCookie);
-await app.register(fastifyJwt, {
-  secret: process.env.JWT_SECRET ?? "dev-only-insecure-secret-change-me",
-});
+
+// Signs both the admin session and the fan-unlock cookie — the fan
+// side now gates real content access (per-track cards), not just the
+// admin panel, so a silently-accepted default here would let anyone
+// who's read this file forge a cookie unlocking any track. Fail at
+// startup instead of falling back to a known string (local dev's
+// .env already sets a real value, so this never trips there).
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) {
+  throw new Error("JWT_SECRET must be set — refusing to start with an insecure default.");
+}
+await app.register(fastifyJwt, { secret: jwtSecret });
 await app.register(fastifyRateLimit, { global: false });
 
 app.get(
