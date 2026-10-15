@@ -90,7 +90,14 @@ export async function adminCardRoutes(app: FastifyInstance) {
         where: { id: trackId },
         include: { release: { include: { artist: true } } },
       });
-      if (!track) {
+      // The admin UI's picker only ever lists READY tracks, but this
+      // route doesn't have to trust that — a card provisioned against
+      // a still-PROCESSING or FAILED track would be redeemable (and
+      // would leak that track's metadata) before it's meant to exist
+      // publicly at all. The track picker's own filter is why this
+      // never happens through normal use, not why it's safe to skip
+      // here.
+      if (!track || track.status !== "READY") {
         return reply.code(404).send({ error: "Track not found." });
       }
 

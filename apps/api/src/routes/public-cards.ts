@@ -35,9 +35,15 @@ export async function publicCardRoutes(app: FastifyInstance) {
   typedApp.post(
     "/cards/redeem",
     {
-      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+      // Card codes are admin-chosen and often low-entropy (sequential
+      // "AKOSI-0001" style codes in practice) with no other brute-force
+      // defense — no attempt counter, no lockout. Matches the stricter
+      // end of this app's existing code-verification endpoints
+      // (/admin/verify-email, /admin/totp/confirm), not the more
+      // permissive default.
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
       schema: {
-        body: Type.Object({ uid: Type.String({ minLength: 1 }) }),
+        body: Type.Object({ uid: Type.String({ minLength: 1, maxLength: 64 }) }),
         response: { 200: RedeemedTrack, 404: ErrorResponse },
       },
     },
@@ -46,7 +52,11 @@ export async function publicCardRoutes(app: FastifyInstance) {
         where: { uid: request.body.uid },
         include: { track: { include: { release: { include: { artist: true } } } } },
       });
-      if (!card || !card.track || card.status === "REVOKED") {
+      // READY-gated the same way public-releases.ts/public-tracks.ts
+      // filter tracks — without this, a card provisioned against a
+      // still-processing or failed track would leak its title/lyrics/
+      // cover before the admin ever meant it to be reachable at all.
+      if (!card || !card.track || card.status === "REVOKED" || card.track.status !== "READY") {
         return reply.code(404).send({ error: "Invalid or revoked card." });
       }
 
