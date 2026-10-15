@@ -57,8 +57,42 @@ function mediaPurposeFor(mediaType: "AUDIO" | "VIDEO"): MediaUploadPurpose {
   return mediaType === "AUDIO" ? "track-audio" : "track-video";
 }
 
+const TrackPickerEntry = Type.Object({
+  id: Type.String(),
+  title: Type.String(),
+  releaseTitle: Type.String(),
+  artistName: Type.String(),
+  mediaType: MediaType,
+});
+
 export async function adminTrackRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<TypeBoxTypeProvider>();
+
+  // Flat cross-artist list for pickers (the "assign a card to a
+  // track" flow) — everything else exposes tracks nested under a
+  // release or artist, which is awkward for "search across
+  // everything."
+  typedApp.get(
+    "/admin/tracks",
+    {
+      preHandler: requireAdminSession,
+      schema: { response: { 200: Type.Array(TrackPickerEntry) } },
+    },
+    async () => {
+      const tracks = await prisma.track.findMany({
+        where: { status: "READY" },
+        include: { release: { include: { artist: true } } },
+        orderBy: { createdAt: "desc" },
+      });
+      return tracks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        releaseTitle: t.release.title,
+        artistName: t.release.artist.name,
+        mediaType: t.mediaType as "AUDIO" | "VIDEO",
+      }));
+    },
+  );
 
   typedApp.post(
     "/admin/releases/:releaseId/tracks",
