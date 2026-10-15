@@ -67,7 +67,7 @@ export function NewReleaseDialog({
       <DialogContent className="bg-akosi-surface text-akosi-fg">
         <DialogHeader>
           <DialogTitle className="font-display">New release</DialogTitle>
-          <DialogDescription>Add tracks and set visibility after creating it.</DialogDescription>
+          <DialogDescription>Add tracks after creating it, then gate any of them with a card.</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-1.5">

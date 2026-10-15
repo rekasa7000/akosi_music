@@ -2,14 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeftIcon, MusicIcon, VideoIcon } from "lucide-react";
+import { useParams } from "next/navigation";
+import { ArrowLeftIcon, LockIcon, MusicIcon, VideoIcon } from "lucide-react";
 import * as api from "@/lib/admin-api";
-import { AkosiWordmark } from "@/components/admin/wordmark";
-import { ThemeToggle } from "@/components/admin/theme-toggle";
+import { AdminShell } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { CoverUploader } from "@/components/admin/catalog/cover-uploader";
-import { VisibilityControl } from "@/components/admin/catalog/visibility-control";
 import { AddTrackForm } from "@/components/admin/catalog/add-track-form";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +17,6 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function ReleaseDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const [authed, setAuthed] = useState(false);
   const [release, setRelease] = useState<api.ReleaseWithTracks | null>(null);
   const [artist, setArtist] = useState<api.Artist | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -30,16 +26,8 @@ export default function ReleaseDetailPage() {
   const [titleError, setTitleError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .me()
-      .then(() => setAuthed(true))
-      .catch(() => router.replace("/admin/login"));
-  }, [router]);
-
-  useEffect(() => {
-    if (!authed) return;
     api.getRelease(params.id).then(setRelease).catch(() => setNotFound(true));
-  }, [authed, params.id]);
+  }, [params.id]);
 
   useEffect(() => {
     if (!release) return;
@@ -68,136 +56,136 @@ export default function ReleaseDetailPage() {
     }
   }
 
-  if (notFound) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-akosi-bg font-sans text-akosi-fg">
-        <p className="text-sm text-akosi-muted-fg">Release not found.</p>
-      </div>
-    );
-  }
-
-  if (!authed || !release) {
-    return null;
-  }
-
   return (
-    <div className="min-h-dvh bg-akosi-bg font-sans text-akosi-fg">
-      <header className="flex items-center justify-between border-b border-akosi-fg/10 px-6 py-4 lg:px-10">
-        <AkosiWordmark />
-        <ThemeToggle />
-      </header>
+    <AdminShell>
+      {notFound ? (
+        <p className="p-8 text-sm text-akosi-muted-fg">Release not found.</p>
+      ) : !release ? (
+        <p className="p-8 text-sm text-akosi-muted-fg">Loading…</p>
+      ) : (
+        <main className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
+          <Link
+            href={`/admin/artists/${release.artistId}`}
+            className="mb-8 inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            Back to artist
+          </Link>
 
-      <main className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-        <Link
-          href="/admin"
-          className="mb-8 inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"
-        >
-          <ArrowLeftIcon className="size-3.5" />
-          Back to dashboard
-        </Link>
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[18rem_1fr]">
+            <CoverUploader
+              currentKey={release.coverImageKey}
+              onUploaded={async (coverImageKey) => {
+                const updated = await api.updateRelease(release.id, { coverImageKey });
+                setRelease({ ...release, ...updated });
+              }}
+            />
 
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[18rem_1fr]">
-          <CoverUploader
-            currentKey={release.coverImageKey}
-            onUploaded={async (coverImageKey) => {
-              const updated = await api.updateRelease(release.id, { coverImageKey });
-              setRelease({ ...release, ...updated });
-            }}
-          />
+            <div className="space-y-5">
+              <p className="text-sm font-medium tracking-wide text-akosi-muted-fg uppercase">
+                Release
+              </p>
 
-          <div className="space-y-5">
-            <p className="text-sm font-medium tracking-wide text-akosi-muted-fg uppercase">
-              Release
-            </p>
-
-            <div>
-              <input
-                ref={titleRef}
-                defaultValue={release.title}
-                onChange={() => setTitleDirty(true)}
-                onBlur={saveTitle}
-                placeholder="Untitled release"
-                className="w-full bg-transparent font-display text-3xl font-semibold text-akosi-fg outline-none placeholder:text-akosi-muted-fg sm:text-4xl"
-              />
-              <div className="mt-1 flex items-center gap-2 text-sm text-akosi-muted-fg">
-                {titleBusy ? <span>Saving…</span> : null}
-                {titleDirty && !titleBusy ? <span>Click away to save</span> : null}
-                {titleError ? <span className="text-akosi-accent-2">{titleError}</span> : null}
+              <div>
+                <input
+                  ref={titleRef}
+                  defaultValue={release.title}
+                  onChange={() => setTitleDirty(true)}
+                  onBlur={saveTitle}
+                  placeholder="Untitled release"
+                  className="w-full bg-transparent font-display text-3xl font-semibold text-akosi-fg outline-none placeholder:text-akosi-muted-fg sm:text-4xl"
+                />
+                <div className="mt-1 flex items-center gap-2 text-sm text-akosi-muted-fg">
+                  {titleBusy ? <span>Saving…</span> : null}
+                  {titleDirty && !titleBusy ? <span>Click away to save</span> : null}
+                  {titleError ? <span className="text-akosi-accent-2">{titleError}</span> : null}
+                </div>
               </div>
+
+              <p className="text-lg text-akosi-muted-fg">{artist?.name ?? "…"}</p>
+            </div>
+          </div>
+
+          <section className="mt-16">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-display text-lg font-medium">
+                Tracks {release.tracks.length > 0 ? `(${release.tracks.length})` : ""}
+              </h2>
+              <Link
+                href="/admin/cards"
+                className="text-sm text-akosi-muted-fg underline-offset-4 hover:text-akosi-fg hover:underline"
+              >
+                Manage cards
+              </Link>
             </div>
 
-            <p className="text-lg text-akosi-muted-fg">{artist?.name ?? "…"}</p>
-
-            <VisibilityControl
-              release={release}
-              onUpdated={(updated) => setRelease({ ...release, ...updated })}
-            />
-          </div>
-        </div>
-
-        <section className="mt-16">
-          <h2 className="mb-4 font-display text-lg font-medium">
-            Tracks {release.tracks.length > 0 ? `(${release.tracks.length})` : ""}
-          </h2>
-
-          {release.tracks.length > 0 ? (
-            <div className="mb-8 overflow-hidden rounded-xl border border-akosi-fg/10 bg-akosi-surface">
-              {release.tracks.map((track, i) => {
-                const Icon = track.mediaType === "AUDIO" ? MusicIcon : VideoIcon;
-                return (
-                  <div
-                    key={track.id}
-                    className={cn(
-                      "flex items-center gap-4 px-5 py-3.5",
-                      i !== 0 && "border-t border-akosi-fg/10",
-                    )}
-                  >
-                    <span className="w-5 shrink-0 text-right text-sm tabular-nums text-akosi-muted-fg">
-                      {track.trackNumber ?? i + 1}
-                    </span>
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-akosi-accent/10 text-akosi-accent-2">
-                      <Icon className="size-4" />
-                    </div>
-                    <p className="min-w-0 flex-1 truncate font-medium">{track.title}</p>
-                    <Badge
-                      variant="outline"
+            {release.tracks.length > 0 ? (
+              <div className="mb-8 overflow-hidden rounded-xl border border-akosi-fg/10 bg-akosi-surface">
+                {release.tracks.map((track, i) => {
+                  const Icon = track.mediaType === "AUDIO" ? MusicIcon : VideoIcon;
+                  return (
+                    <div
+                      key={track.id}
                       className={cn(
-                        "border-akosi-fg/15 text-akosi-muted-fg",
-                        STATUS_STYLES[track.status],
+                        "flex items-center gap-4 px-5 py-3.5",
+                        i !== 0 && "border-t border-akosi-fg/10",
                       )}
                     >
-                      {track.status}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="mb-8 text-sm text-akosi-muted-fg">No tracks yet — add the first one below.</p>
-          )}
+                      <span className="w-5 shrink-0 text-right text-sm tabular-nums text-akosi-muted-fg">
+                        {track.trackNumber ?? i + 1}
+                      </span>
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-akosi-accent/10 text-akosi-accent-2">
+                        <Icon className="size-4" />
+                      </div>
+                      <p className="min-w-0 flex-1 truncate font-medium">{track.title}</p>
+                      {track.locked ? (
+                        <Badge variant="outline" className="gap-1 border-akosi-fg/15 text-akosi-muted-fg">
+                          <LockIcon className="size-3" />
+                          {track.cardCount} card{track.cardCount === 1 ? "" : "s"}
+                        </Badge>
+                      ) : null}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "border-akosi-fg/15 text-akosi-muted-fg",
+                          STATUS_STYLES[track.status],
+                        )}
+                      >
+                        {track.status}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mb-8 text-sm text-akosi-muted-fg">No tracks yet — add the first one below.</p>
+            )}
 
-          <AddTrackForm
-            releaseId={release.id}
-            nextTrackNumber={release.tracks.length + 1}
-            onCreated={(track) =>
-              setRelease({
-                ...release,
-                tracks: [
-                  ...release.tracks,
-                  {
-                    id: track.id,
-                    title: track.title,
-                    trackNumber: track.trackNumber,
-                    mediaType: track.mediaType,
-                    status: track.status,
-                    coverImageKey: track.coverImageKey,
-                  },
-                ],
-              })
-            }
-          />
-        </section>
-      </main>
-    </div>
+            <AddTrackForm
+              releaseId={release.id}
+              nextTrackNumber={release.tracks.length + 1}
+              onCreated={(track) =>
+                setRelease({
+                  ...release,
+                  tracks: [
+                    ...release.tracks,
+                    {
+                      id: track.id,
+                      title: track.title,
+                      trackNumber: track.trackNumber,
+                      mediaType: track.mediaType,
+                      status: track.status,
+                      coverImageKey: track.coverImageKey,
+                      cardCount: 0,
+                      locked: false,
+                    },
+                  ],
+                })
+              }
+            />
+          </section>
+        </main>
+      )}
+    </AdminShell>
   );
 }
