@@ -16,15 +16,19 @@ const NAV_ITEMS = [
   { href: "/admin/cards", label: "Cards", icon: CreditCardIcon },
 ] as const;
 
+function emailInitials(email: string): string {
+  return email.slice(0, 2).toUpperCase();
+}
+
 export function AdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [authed, setAuthed] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .me()
-      .then(() => setAuthed(true))
+      .then((user) => setEmail(user.email))
       .catch(() => router.replace("/admin/login"));
   }, [router]);
 
@@ -33,7 +37,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     router.replace("/admin/login");
   }
 
-  if (!authed) {
+  if (!email) {
     return null;
   }
 
@@ -65,8 +69,17 @@ export function AdminShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="flex items-center justify-between px-2 pt-4">
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-end gap-3 border-b border-akosi-fg/10 px-8 py-3.5">
           <ThemeToggle />
+          <div className="flex items-center gap-2.5 rounded-full border border-akosi-fg/10 bg-akosi-surface py-1 pr-3 pl-1">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-akosi-accent to-akosi-accent-2 text-xs font-medium text-white">
+              {emailInitials(email)}
+            </div>
+            <span className="text-sm text-akosi-fg">{email}</span>
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -75,9 +88,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           >
             Sign out
           </Button>
-        </div>
-      </aside>
-      <div className="min-w-0 flex-1 overflow-y-auto">{children}</div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+      </div>
     </div>
   );
 }
