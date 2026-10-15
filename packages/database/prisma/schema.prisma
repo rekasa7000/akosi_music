@@ -110,11 +110,25 @@ model AdminAuthChallenge {
 model Artist {
   id         String    @id @default(cuid())
   // Phase 0: nullable — admin creates artist profiles without a live
-  // account; backfilled once self-serve artist signup ships.
+  // account; backfilled once self-serve artist signup ships. The
+  // profile fields below are deliberately flat (not a separate
+  // "ArtistProfile" table) so that when self-serve login exists, the
+  // same PATCH /admin/artists/:id shape becomes PATCH /artist/profile
+  // scoped by this row's userId instead of an admin session — no
+  // migration needed, just a different auth guard.
   userId     String?   @unique
   name       String
   slug       String    @unique
   bio        String?
+  // Profile fields — modeled on what Spotify exposes as
+  // artist-editable (image, header image, bio, external links), minus
+  // "followers," which needs a real fan-follow relationship this
+  // system doesn't have yet. See docs/11-mvp-phase0.md.
+  profileImageKey String?
+  coverImageKey   String?
+  websiteUrl      String?
+  instagramUrl    String?
+  twitterUrl      String?
   invitedAt  DateTime  @default(now())
   approvedAt DateTime?
   createdAt  DateTime  @default(now())
