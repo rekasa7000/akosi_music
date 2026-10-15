@@ -180,6 +180,14 @@ model Card {
   // into the tap URL printed/encoded on the card) to redeem it. Real
   // NFC auth replaces what proves possession of this value, not the
   // value's role (see docs/11-mvp-phase0.md's convergence table).
+  // Stored in plaintext, not hashed, by necessity: the admin must be
+  // able to read it back to match a row to the physical card in hand
+  // (unlike a login password, it's never "entered once and forgotten"
+  // — it's a durable label on an object, closer to an API key than a
+  // password). Treat DB access and backups with the same care as any
+  // other credential store; a leaked code is revoked by setting that
+  // row's status to REVOKED and provisioning a new card with a new
+  // code, not by editing this field.
   uid             String     @unique
   artistId        String
   // null = Artist Card (unused by Phase 0.5's manual flow, reserved
