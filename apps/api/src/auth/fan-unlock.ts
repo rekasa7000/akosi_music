@@ -1,28 +1,26 @@
-import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-// Gates PRIVATE release access for fans (docs/11-mvp-phase0.md's
-// "Private (password) playback flow") — a single cookie listing every
-// release this browser has unlocked, the stand-in for card-ownership
-// checks until NFC auth exists. Swapping the verification step later
-// means replacing this check inside the same routes, not
-// rearchitecting them.
+// Gates PRIVATE tracks for fans — a track with at least one non-
+// REVOKED Card pointing at it is private, and redeeming any of those
+// cards' codes unlocks it (docs/11-mvp-phase0.md's "Private (password)
+// playback flow", now scoped per-track via manually-provisioned cards
+// instead of a release-wide shared password). This cookie is the
+// stand-in for the card-ownership check real NFC auth will eventually
+// perform at the same point in the request flow.
 
 export const FAN_UNLOCK_COOKIE_NAME = "akosi_fan_unlock";
 const UNLOCK_TTL_SECONDS = 24 * 60 * 60; // 24h, per docs/11-mvp-phase0.md
 const TOKEN_TYPE = "fan-unlock" as const;
 
-type UnlockEntry = { releaseId: string; passwordFingerprint: string };
+type UnlockEntry = { trackId: string; cardId: string };
 type UnlockPayload = { type: typeof TOKEN_TYPE; unlocks: UnlockEntry[] };
 
 // The admin session (session.ts) and this cookie are both JWTs signed
 // with the same app-wide secret — without a type tag, a token meant
 // for one purpose would verify successfully if replayed against the
-// other's cookie slot (flagged by security review as JWT type
-// confusion). The explicit "type" claim plus a full shape check
-// (not just destructuring and trusting whatever's there) closes that
-// off in both directions — see the matching check in
-// requireAdminSession.
+// other's cookie slot (JWT type confusion). The explicit "type" claim
+// plus a full shape check, not just trusting whatever's there, closes
+// that off in both directions.
 function isUnlockPayload(payload: Record<string, unknown>): payload is UnlockPayload {
   if (payload.type !== TOKEN_TYPE || !Array.isArray(payload.unlocks)) return false;
   const p = payload as { unlocks: unknown[] };
@@ -30,20 +28,9 @@ function isUnlockPayload(payload: Record<string, unknown>): payload is UnlockPay
     (u): u is UnlockEntry =>
       typeof u === "object" &&
       u !== null &&
-      typeof (u as Record<string, unknown>).releaseId === "string" &&
-      typeof (u as Record<string, unknown>).passwordFingerprint === "string",
+      typeof (u as Record<string, unknown>).trackId === "string" &&
+      typeof (u as Record<string, unknown>).cardId === "string",
   );
-}
-
-// Ties an unlock to the release's password *at the time it was
-// granted*, without storing the password hash itself in a
-// client-held token. If the admin rotates a leaked password, every
-// previously-issued unlock cookie stops matching this fingerprint on
-// its next check — revoked for free, no server-side blocklist needed
-// (closes the "unlock never expires even after password rotation"
-// gap flagged by security review).
-function fingerprint(passwordHash: string): string {
-  return createHash("sha256").update(passwordHash).digest("hex").slice(0, 16);
 }
 
 function readUnlockPayload(request: FastifyRequest): UnlockPayload | null {
@@ -57,35 +44,40 @@ function readUnlockPayload(request: FastifyRequest): UnlockPayload | null {
   }
 }
 
-export function isReleaseUnlocked(
+// `activeCardIds` is the track's currently non-REVOKED card ids,
+// loaded fresh by the caller on every check (not cached in the
+// cookie) — revoking the specific card someone redeemed cuts their
+// access immediately, even mid-cookie-lifetime, without needing a
+// server-side token blocklist.
+export function isTrackUnlocked(
   request: FastifyRequest,
-  releaseId: string,
-  currentPasswordHash: string,
+  trackId: string,
+  activeCardIds: string[],
 ): boolean {
-  const entry = readUnlockPayload(request)?.unlocks.find((u) => u.releaseId === releaseId);
-  return entry?.passwordFingerprint === fingerprint(currentPasswordHash);
+  const entry = readUnlockPayload(request)?.unlocks.find((u) => u.trackId === trackId);
+  return entry != null && activeCardIds.includes(entry.cardId);
 }
 
-export async function grantReleaseUnlock(
+// Which card (if any) is this request's proof for `trackId` — used to
+// attribute a PlayEvent to the card that was actually tapped/redeemed.
+export function getUnlockCardId(request: FastifyRequest, trackId: string): string | null {
+  return readUnlockPayload(request)?.unlocks.find((u) => u.trackId === trackId)?.cardId ?? null;
+}
+
+export async function grantTrackUnlock(
   app: FastifyInstance,
   request: FastifyRequest,
   reply: FastifyReply,
-  releaseId: string,
-  passwordHash: string,
+  trackId: string,
+  cardId: string,
 ): Promise<void> {
   const existing = readUnlockPayload(request)?.unlocks ?? [];
-  const unlocks = [
-    ...existing.filter((u) => u.releaseId !== releaseId),
-    { releaseId, passwordFingerprint: fingerprint(passwordHash) },
-  ];
+  const unlocks = [...existing.filter((u) => u.trackId !== trackId), { trackId, cardId }];
   const token = await app.jwt.sign({ type: TOKEN_TYPE, unlocks }, { expiresIn: UNLOCK_TTL_SECONDS });
   reply.setCookie(FAN_UNLOCK_COOKIE_NAME, token, {
     httpOnly: true,
     // Secure by default — only the explicit local-dev env (plain HTTP
-    // on localhost) opts out. The previous `=== "production"` check
-    // failed *open*: any unset or misconfigured NODE_ENV (a staging
-    // box, a typo) would silently drop the Secure flag and let this
-    // cookie travel over plain HTTP (flagged by security review).
+    // on localhost) opts out.
     secure: process.env.NODE_ENV !== "development",
     sameSite: "lax",
     path: "/",
