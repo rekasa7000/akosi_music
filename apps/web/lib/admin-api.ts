@@ -117,8 +117,6 @@ export type Artist = {
   createdAt: string;
 };
 
-export type Visibility = "PUBLIC" | "PRIVATE";
-
 export type MediaType = "AUDIO" | "VIDEO";
 
 export type TrackSummary = {
@@ -128,6 +126,11 @@ export type TrackSummary = {
   mediaType: MediaType;
   status: string;
   coverImageKey: string | null;
+  // "locked" means the track has ever had a card assigned, even if
+  // every one is currently revoked (still gated, just needs a new
+  // card to be redeemable again) — cardCount only counts active ones.
+  cardCount: number;
+  locked: boolean;
 };
 
 export type Release = {
@@ -135,7 +138,6 @@ export type Release = {
   artistId: string;
   title: string;
   releasedAt: string | null;
-  visibility: Visibility;
   coverImageKey: string | null;
   createdAt: string;
 };
@@ -179,13 +181,7 @@ export function createRelease(params: { artistId: string; title: string; release
 
 export function updateRelease(
   id: string,
-  params: {
-    title?: string;
-    releasedAt?: string;
-    visibility?: Visibility;
-    password?: string;
-    coverImageKey?: string;
-  },
+  params: { title?: string; releasedAt?: string; coverImageKey?: string },
 ) {
   return request<Release>(`/admin/releases/${id}`, {
     method: "PATCH",
@@ -211,6 +207,18 @@ export function createTrack(
   });
 }
 
+export type TrackPickerEntry = {
+  id: string;
+  title: string;
+  releaseTitle: string;
+  artistName: string;
+  mediaType: MediaType;
+};
+
+export function listAllTracks() {
+  return request<TrackPickerEntry[]>("/admin/tracks");
+}
+
 export function updateTrack(
   id: string,
   params: { title?: string; trackNumber?: number; lyrics?: string; coverImageKey?: string },
@@ -234,4 +242,76 @@ export async function uploadMedia(purpose: MediaUploadPurpose, file: File): Prom
     throw new AdminApiError("Upload failed. Please try again.");
   }
   return key;
+}
+
+// --- Dashboard stats ---
+
+export type Stats = {
+  artistCount: number;
+  releaseCount: number;
+  trackCount: number;
+  totalPlays: number;
+  cardCount: number;
+  cardsByStatus: { UNCLAIMED: number; CLAIMED: number; REVOKED: number };
+};
+
+export function getStats() {
+  return request<Stats>("/admin/stats");
+}
+
+// --- Artist detail (roster drill-down) ---
+
+export type ArtistTrack = {
+  id: string;
+  title: string;
+  trackNumber: number | null;
+  mediaType: MediaType;
+  status: string;
+  playCount: number;
+  cardCount: number;
+  locked: boolean;
+};
+
+export type ArtistReleaseSummary = {
+  id: string;
+  title: string;
+  releasedAt: string | null;
+  tracks: ArtistTrack[];
+};
+
+export type ArtistDetail = Artist & { releases: ArtistReleaseSummary[] };
+
+export function getArtist(id: string) {
+  return request<ArtistDetail>(`/admin/artists/${id}`);
+}
+
+// --- Cards (Phase 0.5 manual provisioning, docs/11-mvp-phase0.md) ---
+
+export type CardStatus = "UNCLAIMED" | "CLAIMED" | "REVOKED";
+
+export type Card = {
+  id: string;
+  uid: string;
+  status: CardStatus;
+  editionLabel: string | null;
+  provisionedAt: string;
+  trackId: string;
+  trackTitle: string;
+  releaseId: string;
+  releaseTitle: string;
+  artistId: string;
+  artistName: string;
+  playCount: number;
+};
+
+export function listCards() {
+  return request<Card[]>("/admin/cards");
+}
+
+export function createCard(params: { uid: string; trackId: string; editionLabel?: string }) {
+  return request<Card>("/admin/cards", { method: "POST", body: JSON.stringify(params) });
+}
+
+export function updateCard(id: string, params: { status?: CardStatus; editionLabel?: string }) {
+  return request<Card>(`/admin/cards/${id}`, { method: "PATCH", body: JSON.stringify(params) });
 }
