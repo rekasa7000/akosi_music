@@ -43,7 +43,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh bg-akosi-bg font-sans text-akosi-fg">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-akosi-fg/10 bg-akosi-surface/50 px-4 py-6">
+      <aside className="flex w-60 shrink-0 flex-col border-r-2 border-akosi-fg/10 bg-akosi-surface/50 px-4 py-6">
         <div className="mb-8 px-2">
           <AkosiWordmark />
         </div>
@@ -72,7 +72,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-end gap-3 border-b border-akosi-fg/10 px-8 py-3.5">
+        <header className="flex items-center justify-end gap-3 border-b-2 border-akosi-fg/10 px-8 py-3.5">
           <ThemeToggle />
           <div className="flex items-center gap-2.5 rounded-full border border-akosi-fg/10 bg-akosi-surface py-1 pr-3 pl-1">
             <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-akosi-accent to-akosi-accent-2 text-xs font-medium text-white">
