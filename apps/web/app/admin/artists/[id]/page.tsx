@@ -93,7 +93,7 @@ export default function ArtistDetailPage() {
       ) : !artist ? (
         <p className="p-8 text-sm text-akosi-muted-fg">Loading…</p>
       ) : (
-        <div className="mx-auto max-w-6xl px-8 py-12">
+        <div className="px-8 py-10">
           <Link
             href="/admin/artists"
             className="mb-6 inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"
@@ -125,7 +125,7 @@ export default function ArtistDetailPage() {
             />
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_20rem]">
+          <div className="mt-4 grid max-w-4xl grid-cols-1 gap-10 lg:grid-cols-[1fr_20rem]">
             <div>
               <h1 className="font-display text-3xl font-semibold">{artist.name}</h1>
               <p className="mt-1 text-sm text-akosi-muted-fg">{artist.slug}</p>

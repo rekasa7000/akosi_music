@@ -37,7 +37,7 @@ export default function CardsPage() {
 
   return (
     <AdminShell>
-      <div className="mx-auto max-w-6xl px-8 py-12">
+      <div className="px-8 py-10">
         <div className="mb-8 flex items-center justify-between border-b-2 border-akosi-fg/10 pb-8">
           <div>
             <h1 className="font-display text-3xl font-bold">Cards</h1>
@@ -68,7 +68,7 @@ export default function CardsPage() {
             No cards yet — provision one to gate a track.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {cards.map((card) => (
               <div
                 key={card.id}

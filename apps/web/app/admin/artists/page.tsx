@@ -25,7 +25,7 @@ export default function ArtistsPage() {
 
   return (
     <AdminShell>
-      <div className="mx-auto max-w-6xl px-8 py-12">
+      <div className="px-8 py-10">
         <div className="mb-8 flex items-center justify-between border-b-2 border-akosi-fg/10 pb-8">
           <div>
             <h1 className="font-display text-3xl font-bold">Artists</h1>
@@ -45,7 +45,7 @@ export default function ArtistsPage() {
         ) : artists.length === 0 ? (
           <p className="text-sm text-akosi-muted-fg">No artists yet — add one to get started.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {artists.map((artist) => (
               <Link
                 key={artist.id}

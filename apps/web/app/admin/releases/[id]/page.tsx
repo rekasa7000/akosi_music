@@ -63,7 +63,7 @@ export default function ReleaseDetailPage() {
       ) : !release ? (
         <p className="p-8 text-sm text-akosi-muted-fg">Loading…</p>
       ) : (
-        <main className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
+        <main className="px-8 py-10">
           <Link
             href={`/admin/artists/${release.artistId}`}
             className="mb-8 inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"

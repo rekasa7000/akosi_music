@@ -72,7 +72,7 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminShell>
-      <div className="mx-auto max-w-6xl px-8 py-12">
+      <div className="px-8 py-10">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b-2 border-akosi-fg/10 pb-8">
           <div>
             <h1 className="font-display text-3xl font-bold">Dashboard</h1>
@@ -102,7 +102,7 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem]">
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem]">
           <section>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-semibold">Recent releases</h2>
@@ -115,8 +115,8 @@ export default function AdminDashboardPage() {
             ) : releases.length === 0 ? (
               <p className="text-sm text-akosi-muted-fg">No releases yet.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {releases.slice(0, 6).map((release) => (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                {releases.slice(0, 8).map((release) => (
                   <Link
                     key={release.id}
                     href={`/admin/releases/${release.id}`}
