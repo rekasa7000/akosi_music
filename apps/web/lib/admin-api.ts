@@ -170,16 +170,20 @@ export type MediaUploadPurpose =
   | "artist-profile"
   | "artist-cover";
 
+export type ArtistWithCounts = Artist & { releaseCount: number; trackCount: number };
+
 export function listArtists() {
-  return request<Artist[]>("/admin/artists");
+  return request<ArtistWithCounts[]>("/admin/artists");
 }
 
 export function createArtist(params: { name: string; slug: string; bio?: string }) {
   return request<Artist>("/admin/artists", { method: "POST", body: JSON.stringify(params) });
 }
 
+export type ReleaseSummary = Release & { artistName: string; coverUrl: string | null; trackCount: number };
+
 export function listReleases() {
-  return request<Release[]>("/admin/releases");
+  return request<ReleaseSummary[]>("/admin/releases");
 }
 
 export function getRelease(id: string) {
