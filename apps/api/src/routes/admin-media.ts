@@ -14,13 +14,22 @@ const Purpose = Type.Union([
   Type.Literal("artist-cover"),
 ]);
 
+// Raster formats only, enumerated explicitly — the previous
+// "^image/[a-zA-Z0-9]..." pattern also matched image/svg+xml, and an
+// SVG can embed <script>/event-handler content that executes if the
+// uploaded file is ever opened directly (new tab, direct bucket URL)
+// instead of rendered inside an <img>. Cover art has no legitimate
+// reason to be a vector format here, so it's excluded entirely rather
+// than sanitized.
+const RASTER_IMAGE_PATTERN = "^image/(jpeg|png|webp|gif)$";
+
 const CONTENT_TYPE_PATTERN: Record<MediaUploadPurpose, string> = {
-  "release-cover": "^image/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
-  "track-cover": "^image/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
+  "release-cover": RASTER_IMAGE_PATTERN,
+  "track-cover": RASTER_IMAGE_PATTERN,
   "track-audio": "^audio/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
   "track-video": "^video/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
-  "artist-profile": "^image/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
-  "artist-cover": "^image/[a-zA-Z0-9][a-zA-Z0-9.+-]*$",
+  "artist-profile": RASTER_IMAGE_PATTERN,
+  "artist-cover": RASTER_IMAGE_PATTERN,
 };
 
 export async function adminMediaRoutes(app: FastifyInstance) {
@@ -54,9 +63,13 @@ export async function adminMediaRoutes(app: FastifyInstance) {
       const { purpose, contentType } = request.body;
       const pattern = new RegExp(CONTENT_TYPE_PATTERN[purpose]);
       if (!pattern.test(contentType)) {
-        return reply.code(400).send({
-          error: `contentType must match ${purpose === "track-audio" ? "audio/*" : purpose === "track-video" ? "video/*" : "image/*"} for purpose "${purpose}".`,
-        });
+        const expected =
+          purpose === "track-audio"
+            ? "audio/*"
+            : purpose === "track-video"
+              ? "video/*"
+              : "image/jpeg, image/png, image/webp, or image/gif";
+        return reply.code(400).send({ error: `contentType must be ${expected} for purpose "${purpose}".` });
       }
 
       const key = generateUploadKey(purpose);
