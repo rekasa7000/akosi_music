@@ -61,6 +61,11 @@ async function serializeArtist(artist: {
   };
 }
 
+const ArtistWithCounts = Type.Intersect([
+  Artist,
+  Type.Object({ releaseCount: Type.Integer(), trackCount: Type.Integer() }),
+]);
+
 const ArtistTrack = Type.Object({
   id: Type.String(),
   title: Type.String(),
@@ -133,12 +138,21 @@ export async function adminArtistRoutes(app: FastifyInstance) {
     {
       preHandler: requireAdminSession,
       schema: {
-        response: { 200: Type.Array(Artist) },
+        response: { 200: Type.Array(ArtistWithCounts) },
       },
     },
     async () => {
-      const artists = await prisma.artist.findMany({ orderBy: { createdAt: "desc" } });
-      return Promise.all(artists.map(serializeArtist));
+      const artists = await prisma.artist.findMany({
+        orderBy: { createdAt: "desc" },
+        include: { releases: { select: { _count: { select: { tracks: true } } } } },
+      });
+      return Promise.all(
+        artists.map(async (artist) => ({
+          ...(await serializeArtist(artist)),
+          releaseCount: artist.releases.length,
+          trackCount: artist.releases.reduce((sum, r) => sum + r._count.tracks, 0),
+        })),
+      );
     },
   );
 

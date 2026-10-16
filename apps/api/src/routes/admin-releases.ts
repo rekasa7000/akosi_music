@@ -3,7 +3,13 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
 import { prisma } from "@akosi/database";
 import { requireAdminSession } from "../auth/session.js";
-import { promoteRawUploadToMedia, keyMatchesPurpose, UploadNotFoundError } from "../storage.js";
+import {
+  promoteRawUploadToMedia,
+  keyMatchesPurpose,
+  UploadNotFoundError,
+  MEDIA_BUCKET,
+  createPresignedPlaybackUrl,
+} from "../storage.js";
 
 const Track = Type.Object({
   id: Type.String(),
@@ -27,7 +33,21 @@ const Release = Type.Object({
 
 const ReleaseWithTracks = Type.Intersect([Release, Type.Object({ tracks: Type.Array(Track) })]);
 
+const ReleaseSummary = Type.Intersect([
+  Release,
+  Type.Object({
+    artistName: Type.String(),
+    coverUrl: Type.Union([Type.String(), Type.Null()]),
+    trackCount: Type.Integer(),
+  }),
+]);
+
 const ErrorResponse = Type.Object({ error: Type.String() });
+
+async function resolveCoverUrl(key: string | null): Promise<string | null> {
+  if (!key) return null;
+  return createPresignedPlaybackUrl({ bucket: MEDIA_BUCKET, key });
+}
 
 function serializeRelease(release: {
   id: string;
@@ -80,11 +100,21 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
     "/admin/releases",
     {
       preHandler: requireAdminSession,
-      schema: { response: { 200: Type.Array(Release) } },
+      schema: { response: { 200: Type.Array(ReleaseSummary) } },
     },
     async () => {
-      const releases = await prisma.release.findMany({ orderBy: { createdAt: "desc" } });
-      return releases.map(serializeRelease);
+      const releases = await prisma.release.findMany({
+        orderBy: { createdAt: "desc" },
+        include: { artist: true, _count: { select: { tracks: true } } },
+      });
+      return Promise.all(
+        releases.map(async (release) => ({
+          ...serializeRelease(release),
+          artistName: release.artist.name,
+          coverUrl: await resolveCoverUrl(release.coverImageKey),
+          trackCount: release._count.tracks,
+        })),
+      );
     },
   );
 
