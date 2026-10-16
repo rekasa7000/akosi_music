@@ -72,7 +72,7 @@ export default function ReleaseDetailPage() {
             Back to artist
           </Link>
 
-          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[18rem_1fr]">
+          <div className="grid grid-cols-1 gap-10 border-b-2 border-akosi-fg/10 pb-10 lg:grid-cols-[18rem_1fr]">
             <CoverUploader
               purpose="release-cover"
               currentKey={release.coverImageKey}
@@ -94,7 +94,7 @@ export default function ReleaseDetailPage() {
                   onChange={() => setTitleDirty(true)}
                   onBlur={saveTitle}
                   placeholder="Untitled release"
-                  className="w-full bg-transparent font-display text-3xl font-semibold text-akosi-fg outline-none placeholder:text-akosi-muted-fg sm:text-4xl"
+                  className="w-full bg-transparent font-display text-3xl font-bold text-akosi-fg outline-none placeholder:text-akosi-muted-fg sm:text-5xl"
                 />
                 <div className="mt-1 flex items-center gap-2 text-sm text-akosi-muted-fg">
                   {titleBusy ? <span>Saving…</span> : null}
@@ -107,32 +107,38 @@ export default function ReleaseDetailPage() {
             </div>
           </div>
 
-          <section className="mt-16">
+          <section className="mt-10">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-lg font-medium">
+              <h2 className="font-display text-xl font-bold">
                 Tracks {release.tracks.length > 0 ? `(${release.tracks.length})` : ""}
               </h2>
               <Link
                 href="/admin/cards"
-                className="text-sm text-akosi-muted-fg underline-offset-4 hover:text-akosi-fg hover:underline"
+                className="text-sm font-medium text-akosi-accent-2 hover:underline"
               >
                 Manage cards
               </Link>
             </div>
 
             {release.tracks.length > 0 ? (
-              <div className="mb-8 overflow-hidden rounded-xl border border-akosi-fg/10 bg-akosi-surface">
+              <div className="mb-8 space-y-3">
                 {release.tracks.map((track, i) => {
                   const Icon = track.mediaType === "AUDIO" ? MusicIcon : VideoIcon;
                   return (
                     <div
                       key={track.id}
                       className={cn(
-                        "flex items-center gap-4 px-5 py-3.5",
-                        i !== 0 && "border-t border-akosi-fg/10",
+                        "relative flex items-center gap-4 overflow-hidden rounded-xl border-2 bg-akosi-surface py-3.5 pr-5 pl-6",
+                        track.locked ? "border-akosi-accent-2/30" : "border-akosi-fg/10",
                       )}
                     >
-                      <span className="w-5 shrink-0 text-right text-sm tabular-nums text-akosi-muted-fg">
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 left-0 w-1.5",
+                          track.locked ? "bg-akosi-accent-2" : "bg-akosi-fg/10",
+                        )}
+                      />
+                      <span className="w-5 shrink-0 text-right text-sm font-semibold tabular-nums text-akosi-muted-fg">
                         {track.trackNumber ?? i + 1}
                       </span>
                       <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-akosi-accent/10 text-akosi-accent-2">
@@ -140,7 +146,7 @@ export default function ReleaseDetailPage() {
                       </div>
                       <p className="min-w-0 flex-1 truncate font-medium">{track.title}</p>
                       {track.locked ? (
-                        <Badge variant="outline" className="gap-1 border-akosi-fg/15 text-akosi-muted-fg">
+                        <Badge className="gap-1 border-none bg-akosi-accent-2/15 text-akosi-accent-2">
                           <LockIcon className="size-3" />
                           {track.cardCount} card{track.cardCount === 1 ? "" : "s"}
                         </Badge>
