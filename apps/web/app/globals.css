@@ -167,3 +167,20 @@
     animation: none;
   }
 }
+
+/* Continuous ticker for the landing page's marquee strip — the
+   content is duplicated once in markup so -50% wraps seamlessly. */
+@keyframes akosi-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.akosi-marquee {
+  animation: akosi-marquee 26s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .akosi-marquee {
+    animation: none;
+  }
+}
