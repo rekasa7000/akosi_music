@@ -89,10 +89,14 @@ const ArtistDetail = Type.Intersect([
   }),
 ]);
 
-// Website/social fields take a bare URL — require a scheme so the
-// stored value is always directly usable as an href, never something
-// that silently resolves relative to this app's own origin.
-const UrlField = Type.String({ format: "uri", maxLength: 300 });
+// Website/social fields end up as the href of a real link once a
+// profile page renders them — format: "uri" alone accepts
+// javascript:/data:/vbscript: URIs too (syntactically valid URIs,
+// but executable if ever rendered as <a href={value}>), so nothing
+// but http(s) is accepted at the point of storage. Relying on every
+// future renderer to re-check the scheme would just be waiting for
+// one to forget.
+const UrlField = Type.String({ pattern: "^https?://", maxLength: 300 });
 
 export async function adminArtistRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<TypeBoxTypeProvider>();
