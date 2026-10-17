@@ -230,7 +230,12 @@ export default function ReleaseDetailPage() {
         </main>
       )}
       {playing ? (
-        <TrackPlayer title={playing.title} playback={playing.playback} onClose={() => setPlaying(null)} />
+        <TrackPlayer
+          key={playing.id}
+          title={playing.title}
+          playback={playing.playback}
+          onClose={() => setPlaying(null)}
+        />
       ) : null}
     </AdminShell>
   );
