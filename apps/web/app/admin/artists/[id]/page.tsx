@@ -150,8 +150,8 @@ export default function ArtistDetailPage() {
             />
           </div>
 
-          <div className="mt-4 grid max-w-4xl grid-cols-1 gap-10 lg:grid-cols-[1fr_20rem]">
-            <div>
+          <div className="mt-4 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_20rem]">
+            <div className="max-w-2xl">
               <h1 className="font-display text-3xl font-semibold">{artist.name}</h1>
               <p className="mt-1 text-sm text-akosi-muted-fg">{artist.slug}</p>
 
