@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeftIcon, DiscIcon, LockIcon, Music2Icon, MusicIcon, PlayIcon, VideoIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  DiscIcon,
+  Loader2Icon,
+  LockIcon,
+  Music2Icon,
+  PauseIcon,
+  PlayIcon,
+} from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CoverUploader } from "@/components/admin/catalog/cover-uploader";
+import { TrackPlayer } from "@/components/admin/track-player";
 import { cn } from "@/lib/utils";
 
 function StatChip({
@@ -65,10 +74,28 @@ export default function ArtistDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const bioRef = useRef<HTMLTextAreaElement>(null);
   const [bioDirty, setBioDirty] = useState(false);
+  const [playing, setPlaying] = useState<{ id: string; title: string; playback: api.PlayResponse } | null>(
+    null,
+  );
+  const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     api.getArtist(params.id).then(setArtist).catch(() => setNotFound(true));
   }, [params.id]);
+
+  async function handlePlay(track: { id: string; title: string }) {
+    if (playing?.id === track.id) {
+      setPlaying(null);
+      return;
+    }
+    setLoadingTrackId(track.id);
+    try {
+      const playback = await api.getTrackPlayUrl(track.id);
+      setPlaying({ id: track.id, title: track.title, playback });
+    } finally {
+      setLoadingTrackId(null);
+    }
+  }
 
   function patchArtist(params: Parameters<typeof api.updateArtist>[1]) {
     if (!artist) return;
@@ -112,7 +139,7 @@ export default function ArtistDetailPage() {
             }}
           />
 
-          <div className="relative z-10 -mt-12 ml-6 w-28 rounded-full ring-4 ring-akosi-bg">
+          <div className="relative z-10 -mt-12 w-28 rounded-full ring-4 ring-akosi-bg">
             <CoverUploader
               purpose="artist-profile"
               shape="circle"
@@ -191,7 +218,8 @@ export default function ArtistDetailPage() {
                   ) : (
                     <div className="overflow-hidden rounded-xl border border-akosi-fg/10 bg-akosi-surface">
                       {release.tracks.map((track, i) => {
-                        const Icon = track.mediaType === "AUDIO" ? MusicIcon : VideoIcon;
+                        const isPlaying = playing?.id === track.id;
+                        const isLoading = loadingTrackId === track.id;
                         return (
                           <div
                             key={track.id}
@@ -200,7 +228,25 @@ export default function ArtistDetailPage() {
                               i !== 0 && "border-t border-akosi-fg/10",
                             )}
                           >
-                            <Icon className="size-4 shrink-0 text-akosi-muted-fg" />
+                            <button
+                              type="button"
+                              onClick={() => handlePlay(track)}
+                              disabled={isLoading}
+                              className={cn(
+                                "flex size-7 shrink-0 items-center justify-center rounded-full transition-colors",
+                                isPlaying
+                                  ? "bg-akosi-accent text-white"
+                                  : "bg-akosi-accent/10 text-akosi-accent-2 hover:bg-akosi-accent/20",
+                              )}
+                            >
+                              {isLoading ? (
+                                <Loader2Icon className="size-3.5 animate-spin" />
+                              ) : isPlaying ? (
+                                <PauseIcon className="size-3.5" />
+                              ) : (
+                                <PlayIcon className="size-3.5" />
+                              )}
+                            </button>
                             <p className="min-w-0 flex-1 truncate font-medium">{track.title}</p>
                             {track.locked ? (
                               <Badge
@@ -225,6 +271,9 @@ export default function ArtistDetailPage() {
           </div>
         </div>
       )}
+      {playing ? (
+        <TrackPlayer title={playing.title} playback={playing.playback} onClose={() => setPlaying(null)} />
+      ) : null}
     </AdminShell>
   );
 }
