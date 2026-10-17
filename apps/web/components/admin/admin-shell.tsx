@@ -42,8 +42,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-dvh bg-akosi-bg font-sans text-akosi-fg">
-      <aside className="flex w-60 shrink-0 flex-col border-r-2 border-akosi-fg/10 bg-akosi-surface/50 px-4 py-6">
+    <div className="flex h-dvh overflow-hidden bg-akosi-bg font-sans text-akosi-fg">
+      <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-r-2 border-akosi-fg/10 bg-akosi-surface/50 px-4 py-6">
         <div className="mb-8 px-2">
           <AkosiWordmark />
         </div>
