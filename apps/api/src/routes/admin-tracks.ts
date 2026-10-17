@@ -7,6 +7,8 @@ import {
   promoteRawUploadToMedia,
   keyMatchesPurpose,
   UploadNotFoundError,
+  MEDIA_BUCKET,
+  createPresignedPlaybackUrl,
   type MediaUploadPurpose,
 } from "../storage.js";
 
@@ -65,6 +67,11 @@ const TrackPickerEntry = Type.Object({
   mediaType: MediaType,
 });
 
+const PlayResponse = Type.Object({
+  url: Type.String(),
+  mediaType: MediaType,
+});
+
 export async function adminTrackRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<TypeBoxTypeProvider>();
 
@@ -91,6 +98,35 @@ export async function adminTrackRoutes(app: FastifyInstance) {
         artistName: t.release.artist.name,
         mediaType: t.mediaType as "AUDIO" | "VIDEO",
       }));
+    },
+  );
+
+  // Admin playback bypasses the fan card-unlock gate entirely — an
+  // authenticated admin can preview any track regardless of lock
+  // status. No PlayEvent is recorded, so admin previews don't skew
+  // fan-facing play counts.
+  typedApp.get(
+    "/admin/tracks/:id/play",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: PlayResponse, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      const track = await prisma.track.findUnique({ where: { id: request.params.id } });
+      if (!track || track.status !== "READY") {
+        return reply.code(404).send({ error: "Track not found." });
+      }
+
+      const key = track.processedStorageKey ?? track.rawStorageKey;
+      if (!key) {
+        return reply.code(404).send({ error: "Track not found." });
+      }
+
+      const url = await createPresignedPlaybackUrl({ bucket: MEDIA_BUCKET, key });
+      return { url, mediaType: track.mediaType as "AUDIO" | "VIDEO" };
     },
   );
 

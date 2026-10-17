@@ -234,6 +234,12 @@ export function listAllTracks() {
   return request<TrackPickerEntry[]>("/admin/tracks");
 }
 
+export type PlayResponse = { url: string; mediaType: MediaType };
+
+export function getTrackPlayUrl(id: string) {
+  return request<PlayResponse>(`/admin/tracks/${encodeURIComponent(id)}/play`);
+}
+
 export function updateTrack(
   id: string,
   params: { title?: string; trackNumber?: number; lyrics?: string; coverImageKey?: string },

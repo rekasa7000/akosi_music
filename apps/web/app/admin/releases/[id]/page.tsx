@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeftIcon, LockIcon, MusicIcon, VideoIcon } from "lucide-react";
+import { ArrowLeftIcon, Loader2Icon, LockIcon, PauseIcon, PlayIcon } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { CoverUploader } from "@/components/admin/catalog/cover-uploader";
 import { AddTrackForm } from "@/components/admin/catalog/add-track-form";
+import { TrackPlayer } from "@/components/admin/track-player";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -24,10 +25,28 @@ export default function ReleaseDetailPage() {
   const [titleDirty, setTitleDirty] = useState(false);
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<{ id: string; title: string; playback: api.PlayResponse } | null>(
+    null,
+  );
+  const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     api.getRelease(params.id).then(setRelease).catch(() => setNotFound(true));
   }, [params.id]);
+
+  async function handlePlay(track: { id: string; title: string }) {
+    if (playing?.id === track.id) {
+      setPlaying(null);
+      return;
+    }
+    setLoadingTrackId(track.id);
+    try {
+      const playback = await api.getTrackPlayUrl(track.id);
+      setPlaying({ id: track.id, title: track.title, playback });
+    } finally {
+      setLoadingTrackId(null);
+    }
+  }
 
   useEffect(() => {
     if (!release) return;
@@ -123,7 +142,8 @@ export default function ReleaseDetailPage() {
             {release.tracks.length > 0 ? (
               <div className="mb-8 space-y-3">
                 {release.tracks.map((track, i) => {
-                  const Icon = track.mediaType === "AUDIO" ? MusicIcon : VideoIcon;
+                  const isPlaying = playing?.id === track.id;
+                  const isLoading = loadingTrackId === track.id;
                   return (
                     <div
                       key={track.id}
@@ -141,9 +161,25 @@ export default function ReleaseDetailPage() {
                       <span className="w-5 shrink-0 text-right text-sm font-semibold tabular-nums text-akosi-muted-fg">
                         {track.trackNumber ?? i + 1}
                       </span>
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-akosi-accent/10 text-akosi-accent-2">
-                        <Icon className="size-4" />
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handlePlay(track)}
+                        disabled={isLoading}
+                        className={cn(
+                          "flex size-9 shrink-0 items-center justify-center rounded-md transition-colors",
+                          isPlaying
+                            ? "bg-akosi-accent text-white"
+                            : "bg-akosi-accent/10 text-akosi-accent-2 hover:bg-akosi-accent/20",
+                        )}
+                      >
+                        {isLoading ? (
+                          <Loader2Icon className="size-4 animate-spin" />
+                        ) : isPlaying ? (
+                          <PauseIcon className="size-4" />
+                        ) : (
+                          <PlayIcon className="size-4" />
+                        )}
+                      </button>
                       <p className="min-w-0 flex-1 truncate font-medium">{track.title}</p>
                       {track.locked ? (
                         <Badge className="gap-1 border-none bg-akosi-accent-2/15 text-akosi-accent-2">
@@ -193,6 +229,9 @@ export default function ReleaseDetailPage() {
           </section>
         </main>
       )}
+      {playing ? (
+        <TrackPlayer title={playing.title} playback={playing.playback} onClose={() => setPlaying(null)} />
+      ) : null}
     </AdminShell>
   );
 }
