@@ -130,6 +130,7 @@ export type TrackSummary = {
   trackNumber: number | null;
   mediaType: MediaType;
   status: string;
+  lyrics: string | null;
   coverImageKey: string | null;
   // "locked" means the track has ever had a card assigned, even if
   // every one is currently revoked (still gated, just needs a new

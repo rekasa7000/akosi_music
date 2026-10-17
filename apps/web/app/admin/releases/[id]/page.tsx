@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeftIcon, Loader2Icon, LockIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { ArrowLeftIcon, Loader2Icon, LockIcon, PauseIcon, PencilIcon, PlayIcon } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { CoverUploader } from "@/components/admin/catalog/cover-uploader";
 import { AddTrackForm } from "@/components/admin/catalog/add-track-form";
+import { EditTrackDialog } from "@/components/admin/catalog/edit-track-dialog";
 import { TrackPlayer } from "@/components/admin/track-player";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ export default function ReleaseDetailPage() {
   const [titleError, setTitleError] = useState<string | null>(null);
   const [playing, setPlaying] = useState<api.PlayResponse & { trackId: string }>();
   const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     api.getRelease(params.id).then(setRelease).catch(() => setNotFound(true));
@@ -194,6 +196,14 @@ export default function ReleaseDetailPage() {
                       >
                         {track.status}
                       </Badge>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTrackId(track.id)}
+                        className="shrink-0 rounded-full p-1.5 text-akosi-muted-fg transition-colors hover:bg-akosi-fg/10 hover:text-akosi-fg"
+                      >
+                        <PencilIcon className="size-3.5" />
+                        <span className="sr-only">Edit track</span>
+                      </button>
                     </div>
                   );
                 })}
@@ -216,6 +226,7 @@ export default function ReleaseDetailPage() {
                       trackNumber: track.trackNumber,
                       mediaType: track.mediaType,
                       status: track.status,
+                      lyrics: track.lyrics,
                       coverImageKey: track.coverImageKey,
                       cardCount: 0,
                       locked: false,
@@ -229,6 +240,21 @@ export default function ReleaseDetailPage() {
       )}
       {playing ? (
         <TrackPlayer key={playing.trackId} playback={playing} onClose={() => setPlaying(undefined)} />
+      ) : null}
+      {release && editingTrackId ? (
+        <EditTrackDialog
+          track={release.tracks.find((t) => t.id === editingTrackId)!}
+          open={true}
+          onOpenChange={(next) => {
+            if (!next) setEditingTrackId(null);
+          }}
+          onUpdated={(updated) =>
+            setRelease({
+              ...release,
+              tracks: release.tracks.map((t) => (t.id === updated.id ? updated : t)),
+            })
+          }
+        />
       ) : null}
     </AdminShell>
   );

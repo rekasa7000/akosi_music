@@ -17,6 +17,7 @@ const Track = Type.Object({
   trackNumber: Type.Union([Type.Integer(), Type.Null()]),
   mediaType: Type.String(),
   status: Type.String(),
+  lyrics: Type.Union([Type.String(), Type.Null()]),
   coverImageKey: Type.Union([Type.String(), Type.Null()]),
   cardCount: Type.Integer(),
   locked: Type.Boolean(),
@@ -145,6 +146,7 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
           trackNumber: track.trackNumber,
           mediaType: track.mediaType,
           status: track.status,
+          lyrics: track.lyrics,
           coverImageKey: track.coverImageKey,
           // Active (redeemable) card count, not the same as "locked":
           // a track with only revoked cards stays locked but shows 0
