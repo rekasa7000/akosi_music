@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   CreditCardIcon,
   DiscIcon,
@@ -56,6 +57,7 @@ function CardsStatusBar({ byStatus }: { byStatus: api.Stats["cardsByStatus"] }) 
 }
 
 export default function AdminDashboardPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<api.Stats | null>(null);
   const [artists, setArtists] = useState<api.ArtistWithCounts[] | null>(null);
   const [releases, setReleases] = useState<api.ReleaseSummary[] | null>(null);
@@ -68,6 +70,13 @@ export default function AdminDashboardPage() {
 
   function refreshStats() {
     api.getStats().then(setStats);
+  }
+
+  // Straight to the release page after creation — that's where the
+  // cover art and tracks actually get added, so there's no point
+  // landing back on the dashboard first.
+  function goToNewRelease(release: api.Release) {
+    router.push(`/admin/releases/${release.id}`);
   }
 
   return (
@@ -87,7 +96,7 @@ export default function AdminDashboardPage() {
                 }}
               />
             ) : null}
-            {artists ? <NewReleaseDialog artists={artists} onCreated={refreshStats} /> : null}
+            {artists ? <NewReleaseDialog artists={artists} onCreated={goToNewRelease} /> : null}
           </div>
         </div>
 
@@ -107,7 +116,7 @@ export default function AdminDashboardPage() {
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-semibold">Recent releases</h2>
               {artists && releases ? (
-                <NewReleaseDialog artists={artists} onCreated={refreshStats} />
+                <NewReleaseDialog artists={artists} onCreated={goToNewRelease} />
               ) : null}
             </div>
             {releases === null ? (
