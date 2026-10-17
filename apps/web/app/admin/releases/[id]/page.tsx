@@ -25,24 +25,22 @@ export default function ReleaseDetailPage() {
   const [titleDirty, setTitleDirty] = useState(false);
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<{ id: string; title: string; playback: api.PlayResponse } | null>(
-    null,
-  );
+  const [playing, setPlaying] = useState<api.PlayResponse & { trackId: string }>();
   const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     api.getRelease(params.id).then(setRelease).catch(() => setNotFound(true));
   }, [params.id]);
 
-  async function handlePlay(track: { id: string; title: string }) {
-    if (playing?.id === track.id) {
-      setPlaying(null);
+  async function handlePlay(track: { id: string }) {
+    if (playing?.trackId === track.id) {
+      setPlaying(undefined);
       return;
     }
     setLoadingTrackId(track.id);
     try {
       const playback = await api.getTrackPlayUrl(track.id);
-      setPlaying({ id: track.id, title: track.title, playback });
+      setPlaying({ ...playback, trackId: track.id });
     } finally {
       setLoadingTrackId(null);
     }
@@ -142,7 +140,7 @@ export default function ReleaseDetailPage() {
             {release.tracks.length > 0 ? (
               <div className="mb-8 space-y-3">
                 {release.tracks.map((track, i) => {
-                  const isPlaying = playing?.id === track.id;
+                  const isPlaying = playing?.trackId === track.id;
                   const isLoading = loadingTrackId === track.id;
                   return (
                     <div
@@ -230,12 +228,7 @@ export default function ReleaseDetailPage() {
         </main>
       )}
       {playing ? (
-        <TrackPlayer
-          key={playing.id}
-          title={playing.title}
-          playback={playing.playback}
-          onClose={() => setPlaying(null)}
-        />
+        <TrackPlayer key={playing.trackId} playback={playing} onClose={() => setPlaying(undefined)} />
       ) : null}
     </AdminShell>
   );

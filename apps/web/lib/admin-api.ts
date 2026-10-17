@@ -234,7 +234,15 @@ export function listAllTracks() {
   return request<TrackPickerEntry[]>("/admin/tracks");
 }
 
-export type PlayResponse = { url: string; mediaType: MediaType };
+export type PlayResponse = {
+  url: string;
+  mediaType: MediaType;
+  title: string;
+  artistName: string;
+  releaseTitle: string;
+  coverUrl: string | null;
+  lyrics: string | null;
+};
 
 export function getTrackPlayUrl(id: string) {
   return request<PlayResponse>(`/admin/tracks/${encodeURIComponent(id)}/play`);

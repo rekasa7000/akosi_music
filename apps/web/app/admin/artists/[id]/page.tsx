@@ -74,24 +74,22 @@ export default function ArtistDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const bioRef = useRef<HTMLTextAreaElement>(null);
   const [bioDirty, setBioDirty] = useState(false);
-  const [playing, setPlaying] = useState<{ id: string; title: string; playback: api.PlayResponse } | null>(
-    null,
-  );
+  const [playing, setPlaying] = useState<api.PlayResponse & { trackId: string }>();
   const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     api.getArtist(params.id).then(setArtist).catch(() => setNotFound(true));
   }, [params.id]);
 
-  async function handlePlay(track: { id: string; title: string }) {
-    if (playing?.id === track.id) {
-      setPlaying(null);
+  async function handlePlay(track: { id: string }) {
+    if (playing?.trackId === track.id) {
+      setPlaying(undefined);
       return;
     }
     setLoadingTrackId(track.id);
     try {
       const playback = await api.getTrackPlayUrl(track.id);
-      setPlaying({ id: track.id, title: track.title, playback });
+      setPlaying({ ...playback, trackId: track.id });
     } finally {
       setLoadingTrackId(null);
     }
@@ -218,7 +216,7 @@ export default function ArtistDetailPage() {
                   ) : (
                     <div className="overflow-hidden rounded-xl border border-akosi-fg/10 bg-akosi-surface">
                       {release.tracks.map((track, i) => {
-                        const isPlaying = playing?.id === track.id;
+                        const isPlaying = playing?.trackId === track.id;
                         const isLoading = loadingTrackId === track.id;
                         return (
                           <div
@@ -272,12 +270,7 @@ export default function ArtistDetailPage() {
         </div>
       )}
       {playing ? (
-        <TrackPlayer
-          key={playing.id}
-          title={playing.title}
-          playback={playing.playback}
-          onClose={() => setPlaying(null)}
-        />
+        <TrackPlayer key={playing.trackId} playback={playing} onClose={() => setPlaying(undefined)} />
       ) : null}
     </AdminShell>
   );

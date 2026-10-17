@@ -70,6 +70,11 @@ const TrackPickerEntry = Type.Object({
 const PlayResponse = Type.Object({
   url: Type.String(),
   mediaType: MediaType,
+  title: Type.String(),
+  artistName: Type.String(),
+  releaseTitle: Type.String(),
+  coverUrl: Type.Union([Type.String(), Type.Null()]),
+  lyrics: Type.Union([Type.String(), Type.Null()]),
 });
 
 export async function adminTrackRoutes(app: FastifyInstance) {
@@ -115,7 +120,10 @@ export async function adminTrackRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const track = await prisma.track.findUnique({ where: { id: request.params.id } });
+      const track = await prisma.track.findUnique({
+        where: { id: request.params.id },
+        include: { release: { include: { artist: true } } },
+      });
       if (!track || track.status !== "READY") {
         return reply.code(404).send({ error: "Track not found." });
       }
@@ -126,7 +134,21 @@ export async function adminTrackRoutes(app: FastifyInstance) {
       }
 
       const url = await createPresignedPlaybackUrl({ bucket: MEDIA_BUCKET, key });
-      return { url, mediaType: track.mediaType as "AUDIO" | "VIDEO" };
+      // Falls back to the release cover when the track has none of its
+      // own — most tracks don't get a per-track cover, so without this
+      // the player would show blank art for almost everything.
+      const coverKey = track.coverImageKey ?? track.release.coverImageKey;
+      const coverUrl = coverKey ? await createPresignedPlaybackUrl({ bucket: MEDIA_BUCKET, key: coverKey }) : null;
+
+      return {
+        url,
+        mediaType: track.mediaType as "AUDIO" | "VIDEO",
+        title: track.title,
+        artistName: track.release.artist.name,
+        releaseTitle: track.release.title,
+        coverUrl,
+        lyrics: track.lyrics,
+      };
     },
   );
 
