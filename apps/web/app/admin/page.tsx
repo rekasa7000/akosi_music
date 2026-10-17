@@ -115,9 +115,6 @@ export default function AdminDashboardPage() {
           <section>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-semibold">Recent releases</h2>
-              {artists && releases ? (
-                <NewReleaseDialog artists={artists} onCreated={goToNewRelease} />
-              ) : null}
             </div>
             {releases === null ? (
               <p className="text-sm text-akosi-muted-fg">Loading…</p>
