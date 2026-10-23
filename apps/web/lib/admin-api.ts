@@ -359,8 +359,41 @@ export type Card = {
   playCount: number;
 };
 
-export function listCards() {
-  return request<Card[]>("/admin/cards");
+export type CardGroupBy = "artist" | "release" | "track" | "status" | "edition";
+
+export type CardGroupSummary = { key: string; label: string; count: number; activeCount: number };
+
+export type CardsPage = { cards: Card[]; nextCursor: string | null };
+
+export type CardStats = { total: number; active: number; revoked: number };
+
+export function getCardStats() {
+  return request<CardStats>("/admin/cards/stats");
+}
+
+export function listCardGroups(params: { groupBy: CardGroupBy; search?: string }) {
+  const qs = new URLSearchParams({ groupBy: params.groupBy });
+  if (params.search) qs.set("search", params.search);
+  return request<CardGroupSummary[]>(`/admin/cards/groups?${qs}`);
+}
+
+export function listCards(
+  params: {
+    search?: string;
+    groupBy?: CardGroupBy;
+    groupKey?: string;
+    cursor?: string;
+    limit?: number;
+  } = {},
+) {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.groupBy) qs.set("groupBy", params.groupBy);
+  if (params.groupKey !== undefined) qs.set("groupKey", params.groupKey);
+  if (params.cursor) qs.set("cursor", params.cursor);
+  if (params.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString();
+  return request<CardsPage>(`/admin/cards${query ? `?${query}` : ""}`);
 }
 
 export function createCard(params: { uid: string; trackId: string; editionLabel?: string }) {
@@ -370,6 +403,18 @@ export function createCard(params: { uid: string; trackId: string; editionLabel?
 export function updateCard(id: string, params: { status?: CardStatus; editionLabel?: string }) {
   return request<Card>(`/admin/cards/${encodeURIComponent(id)}`, {
     method: "PATCH",
+    body: JSON.stringify(params),
+  });
+}
+
+export type BulkCreateCardsResult = {
+  created: Card[];
+  skipped: { uid: string; reason: string }[];
+};
+
+export function createCardsBulk(params: { trackId: string; uids: string[]; editionLabel?: string }) {
+  return request<BulkCreateCardsResult>("/admin/cards/bulk", {
+    method: "POST",
     body: JSON.stringify(params),
   });
 }
