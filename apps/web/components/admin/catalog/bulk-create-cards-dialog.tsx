@@ -25,6 +25,22 @@ function parseCodes(raw: string): string[] {
     .filter(Boolean);
 }
 
+// Card.uid is a bearer credential — any device that has it can unlock
+// a private track, with no other proof of possession (see the schema
+// comment on Card.uid). Sequential codes are guessable; /cards/redeem
+// is rate-limited specifically because codes "in practice" have been
+// low-entropy, but that's a mitigation for codes assumed-weak, not a
+// reason to generate weak ones by default. 12 chars from a 32-symbol
+// alphabet (no 0/O/1/I/L) is ~60 bits — short enough to print and type,
+// long enough that guessing isn't practical even distributed across
+// many IPs.
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+function randomCode(length = 12): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+}
+
 export function BulkCreateCardsDialog({
   tracks,
   onCreated,
@@ -55,10 +71,14 @@ export function BulkCreateCardsDialog({
     const count = Math.max(1, Math.min(500, Number(genCount) || 0));
     const prefix = genPrefix.trim() || "AKOSI";
     const existing = parseCodes(rawCodes);
-    const start = existing.length + 1;
-    const generated = Array.from({ length: count }, (_, i) =>
-      `${prefix}-${String(start + i).padStart(4, "0")}`,
-    );
+    const seen = new Set(existing);
+    const generated: string[] = [];
+    while (generated.length < count) {
+      const code = `${prefix}-${randomCode()}`;
+      if (seen.has(code)) continue; // astronomically unlikely, cheap to guard anyway
+      seen.add(code);
+      generated.push(code);
+    }
     setRawCodes([...existing, ...generated].join("\n"));
   }
 
