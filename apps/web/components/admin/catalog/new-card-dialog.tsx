@@ -6,13 +6,7 @@ import * as api from "@/lib/admin-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { TrackCombobox } from "@/components/admin/catalog/track-combobox";
 import {
   Dialog,
   DialogContent,
@@ -85,18 +79,7 @@ export function NewCardDialog({
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-1.5">
             <Label htmlFor="card-track">Track</Label>
-            <Select value={trackId} onValueChange={setTrackId}>
-              <SelectTrigger id="card-track" className="w-full">
-                <SelectValue placeholder="Choose a track" />
-              </SelectTrigger>
-              <SelectContent>
-                {tracks.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.title} — {t.releaseTitle} ({t.artistName})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <TrackCombobox tracks={tracks} value={trackId} onChange={setTrackId} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="card-uid">Card code</Label>
