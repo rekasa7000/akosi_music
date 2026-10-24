@@ -7,6 +7,7 @@ import {
   promoteRawUploadToMedia,
   keyMatchesPurpose,
   UploadNotFoundError,
+  UploadTooLargeError,
   MEDIA_BUCKET,
   createPresignedPlaybackUrl,
 } from "../storage.js";
@@ -189,9 +190,9 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
           return reply.code(400).send({ error: "coverImageKey doesn't look like a presigned release-cover upload." });
         }
         try {
-          await promoteRawUploadToMedia(coverImageKey);
+          await promoteRawUploadToMedia(coverImageKey, "release-cover");
         } catch (err) {
-          if (err instanceof UploadNotFoundError) {
+          if (err instanceof UploadNotFoundError || err instanceof UploadTooLargeError) {
             return reply.code(400).send({ error: err.message });
           }
           throw err;

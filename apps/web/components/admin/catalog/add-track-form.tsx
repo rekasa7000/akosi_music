@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MAX_AUDIO_UPLOAD_MB, MAX_VIDEO_UPLOAD_MB } from "@/lib/upload-limits";
 import { cn } from "@/lib/utils";
 
 function formatBytes(bytes: number): string {
@@ -50,6 +51,16 @@ export function AddTrackForm({
   function pickCover(f: File) {
     setCoverFile(f);
     setCoverPreviewUrl(URL.createObjectURL(f));
+  }
+
+  function pickMedia(f: File) {
+    const maxMb = mediaType === "AUDIO" ? MAX_AUDIO_UPLOAD_MB : MAX_VIDEO_UPLOAD_MB;
+    if (f.size > maxMb * 1024 * 1024) {
+      setError(`That file is ${formatBytes(f.size)} — ${mediaType === "AUDIO" ? "audio" : "video"} files are limited to ${maxMb}MB.`);
+      return;
+    }
+    setError(null);
+    setFile(f);
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -105,7 +116,7 @@ export function AddTrackForm({
     e.preventDefault();
     setDraggingMedia(false);
     const dropped = e.dataTransfer.files?.[0];
-    if (dropped) setFile(dropped);
+    if (dropped) pickMedia(dropped);
   }
 
   function onCoverDrop(e: DragEvent<HTMLButtonElement>) {
@@ -156,7 +167,10 @@ export function AddTrackForm({
         type="file"
         accept={mediaType === "AUDIO" ? "audio/*" : "video/*"}
         className="hidden"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) pickMedia(f);
+        }}
       />
       {file ? (
         <div className="flex items-center gap-3 rounded-lg border border-akosi-fg/10 bg-akosi-bg px-4 py-3">
@@ -197,7 +211,9 @@ export function AddTrackForm({
             <span className="font-medium text-akosi-accent-2">Click to upload</span> or drag and drop
           </p>
           <p className="text-xs text-akosi-muted-fg">
-            {mediaType === "AUDIO" ? "MP3, WAV, FLAC…" : "MP4, MOV…"}
+            {mediaType === "AUDIO"
+              ? `MP3, WAV, FLAC… up to ${MAX_AUDIO_UPLOAD_MB}MB`
+              : `MP4, MOV… up to ${MAX_VIDEO_UPLOAD_MB}MB`}
           </p>
         </div>
       )}

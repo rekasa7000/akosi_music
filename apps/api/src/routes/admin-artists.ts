@@ -7,6 +7,7 @@ import {
   promoteRawUploadToMedia,
   keyMatchesPurpose,
   UploadNotFoundError,
+  UploadTooLargeError,
   MEDIA_BUCKET,
   createPresignedPlaybackUrl,
 } from "../storage.js";
@@ -256,9 +257,9 @@ export async function adminArtistRoutes(app: FastifyInstance) {
           return reply.code(400).send({ error: `This doesn't look like a presigned ${purpose} upload.` });
         }
         try {
-          await promoteRawUploadToMedia(key);
+          await promoteRawUploadToMedia(key, purpose);
         } catch (err) {
-          if (err instanceof UploadNotFoundError) {
+          if (err instanceof UploadNotFoundError || err instanceof UploadTooLargeError) {
             return reply.code(400).send({ error: err.message });
           }
           throw err;

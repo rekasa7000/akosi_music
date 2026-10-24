@@ -3,6 +3,7 @@
 import { useRef, useState, type DragEvent } from "react";
 import { CameraIcon, ImagePlusIcon, Loader2Icon } from "lucide-react";
 import * as api from "@/lib/admin-api";
+import { formatMb, MAX_IMAGE_UPLOAD_MB } from "@/lib/upload-limits";
 import { cn } from "@/lib/utils";
 
 const SIZE_CLASSES = { lg: "max-w-64", sm: "max-w-36", xs: "max-w-28" } as const;
@@ -38,6 +39,11 @@ export function CoverUploader({
   const [error, setError] = useState<string | null>(null);
 
   async function handleFile(file: File) {
+    if (file.size > MAX_IMAGE_UPLOAD_MB * 1024 * 1024) {
+      setError(`That image is ${formatMb(file.size)}MB — the limit is ${MAX_IMAGE_UPLOAD_MB}MB.`);
+      return;
+    }
+
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     const url = URL.createObjectURL(file);
     previewUrlRef.current = url;

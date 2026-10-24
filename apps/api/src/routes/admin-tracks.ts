@@ -7,6 +7,7 @@ import {
   promoteRawUploadToMedia,
   keyMatchesPurpose,
   UploadNotFoundError,
+  UploadTooLargeError,
   MEDIA_BUCKET,
   createPresignedPlaybackUrl,
   type MediaUploadPurpose,
@@ -190,12 +191,12 @@ export async function adminTrackRoutes(app: FastifyInstance) {
       }
 
       try {
-        await promoteRawUploadToMedia(rawStorageKey);
+        await promoteRawUploadToMedia(rawStorageKey, mediaPurposeFor(mediaType));
         if (coverImageKey !== undefined) {
-          await promoteRawUploadToMedia(coverImageKey);
+          await promoteRawUploadToMedia(coverImageKey, "track-cover");
         }
       } catch (err) {
-        if (err instanceof UploadNotFoundError) {
+        if (err instanceof UploadNotFoundError || err instanceof UploadTooLargeError) {
           return reply.code(400).send({ error: err.message });
         }
         throw err;
@@ -254,9 +255,9 @@ export async function adminTrackRoutes(app: FastifyInstance) {
           return reply.code(400).send({ error: "coverImageKey doesn't look like a presigned track-cover upload." });
         }
         try {
-          await promoteRawUploadToMedia(coverImageKey);
+          await promoteRawUploadToMedia(coverImageKey, "track-cover");
         } catch (err) {
-          if (err instanceof UploadNotFoundError) {
+          if (err instanceof UploadNotFoundError || err instanceof UploadTooLargeError) {
             return reply.code(400).send({ error: err.message });
           }
           throw err;

@@ -5,6 +5,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   CopyObjectCommand,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -135,9 +136,35 @@ export function keyMatchesPurpose(key: string, purpose: MediaUploadPurpose): boo
 
 export class UploadNotFoundError extends Error {}
 
-async function assertRawUploadExists(key: string): Promise<void> {
+export class UploadTooLargeError extends Error {
+  constructor(maxBytes: number, actualBytes: number) {
+    const mb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+    super(`File is ${mb(actualBytes)}MB, which is over the ${mb(maxBytes)}MB limit for this upload type.`);
+  }
+}
+
+// Presigned PUT URLs (unlike presigned POST with a policy document)
+// can't carry a content-length-range condition, so the client-supplied
+// size can't be trusted or enforced at presign time — the file is
+// already sitting in the raw bucket by the time its real size is
+// knowable server-side. Enforced here instead, right before promotion,
+// using HeadObject's real ContentLength (not anything the client sent).
+// The frontend also checks file.size before ever starting an upload —
+// that's purely a fast-feedback UX convenience, not what makes this
+// safe.
+const MAX_UPLOAD_BYTES: Record<MediaUploadPurpose, number> = {
+  "release-cover": (Number(process.env.MAX_IMAGE_UPLOAD_MB) || 10) * 1024 * 1024,
+  "track-cover": (Number(process.env.MAX_IMAGE_UPLOAD_MB) || 10) * 1024 * 1024,
+  "artist-profile": (Number(process.env.MAX_IMAGE_UPLOAD_MB) || 10) * 1024 * 1024,
+  "artist-cover": (Number(process.env.MAX_IMAGE_UPLOAD_MB) || 10) * 1024 * 1024,
+  "track-audio": (Number(process.env.MAX_AUDIO_UPLOAD_MB) || 25) * 1024 * 1024,
+  "track-video": (Number(process.env.MAX_VIDEO_UPLOAD_MB) || 200) * 1024 * 1024,
+};
+
+async function headRawUpload(key: string): Promise<number> {
   try {
-    await getS3Client().send(new HeadObjectCommand({ Bucket: RAW_BUCKET, Key: key }));
+    const head = await getS3Client().send(new HeadObjectCommand({ Bucket: RAW_BUCKET, Key: key }));
+    return head.ContentLength ?? 0;
   } catch {
     throw new UploadNotFoundError(
       `No upload found at "${key}" — presign and upload the file before confirming it.`,
@@ -145,8 +172,18 @@ async function assertRawUploadExists(key: string): Promise<void> {
   }
 }
 
-export async function promoteRawUploadToMedia(key: string): Promise<void> {
-  await assertRawUploadExists(key);
+export async function promoteRawUploadToMedia(key: string, purpose: MediaUploadPurpose): Promise<void> {
+  const contentLength = await headRawUpload(key);
+  const maxBytes = MAX_UPLOAD_BYTES[purpose];
+  if (contentLength > maxBytes) {
+    // Don't leave an oversized file sitting in the raw bucket just
+    // because it was rejected — this is the one route that ever
+    // touches it after upload, so cleanup belongs here.
+    await getS3Client()
+      .send(new DeleteObjectCommand({ Bucket: RAW_BUCKET, Key: key }))
+      .catch(() => {});
+    throw new UploadTooLargeError(maxBytes, contentLength);
+  }
   await getS3Client().send(
     new CopyObjectCommand({
       Bucket: MEDIA_BUCKET,
