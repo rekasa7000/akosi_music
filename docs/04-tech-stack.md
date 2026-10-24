@@ -83,3 +83,8 @@ a later switch (in either direction) stays contained.
 update environment configuration with the GCS/Cloud SQL/Cloud Run
 variables from Path B above and note the decision wherever environment
 variables are documented for the project.
+
+For getting an early staging deploy live at $0 — before this decision
+needs to be final — see `13-deployment.md`, which uses Cloud Run for
+compute but swaps Cloud SQL and Cloud Storage for providers with a
+real permanent free tier.
