@@ -103,11 +103,16 @@ export async function publicArtistRoutes(app: FastifyInstance) {
           },
         },
       });
-      if (!artist) {
+      const releasesWithTracks = artist?.releases.filter((r) => r._count.tracks > 0) ?? [];
+
+      // Same publication gate as GET /artists — an artist with nothing
+      // READY yet isn't meant to be reachable publicly, not even by
+      // someone who already has/guesses the slug (e.g. from the admin
+      // UI, which uses the same slugs). Identical 404 either way, so
+      // this doesn't distinguish "unpublished" from "doesn't exist."
+      if (!artist || releasesWithTracks.length === 0) {
         return reply.code(404).send({ error: "Artist not found." });
       }
-
-      const releasesWithTracks = artist.releases.filter((r) => r._count.tracks > 0);
 
       return {
         slug: artist.slug,
