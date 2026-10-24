@@ -16,6 +16,7 @@ import { adminStatsRoutes } from "./routes/admin-stats.js";
 import { publicReleaseRoutes } from "./routes/public-releases.js";
 import { publicTrackRoutes } from "./routes/public-tracks.js";
 import { publicCardRoutes } from "./routes/public-cards.js";
+import { publicArtistRoutes } from "./routes/public-artists.js";
 
 const app = Fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -75,6 +76,7 @@ await app.register(adminStatsRoutes);
 await app.register(publicReleaseRoutes);
 await app.register(publicTrackRoutes);
 await app.register(publicCardRoutes);
+await app.register(publicArtistRoutes);
 
 const port = Number(process.env.PORT ?? 4000);
 

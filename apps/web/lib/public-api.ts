@@ -74,3 +74,40 @@ export function redeemCard(uid: string) {
 export function getTrackPlayUrl(id: string) {
   return request<PlayResponse>(`/tracks/${encodeURIComponent(id)}/play`);
 }
+
+export type PublicArtistSummary = {
+  slug: string;
+  name: string;
+  bio: string | null;
+  profileImageUrl: string | null;
+  coverImageUrl: string | null;
+  releaseCount: number;
+};
+
+export type PublicArtistRelease = {
+  id: string;
+  title: string;
+  releasedAt: string | null;
+  coverUrl: string | null;
+  trackCount: number;
+};
+
+export type PublicArtistDetail = {
+  slug: string;
+  name: string;
+  bio: string | null;
+  profileImageUrl: string | null;
+  coverImageUrl: string | null;
+  websiteUrl: string | null;
+  instagramUrl: string | null;
+  twitterUrl: string | null;
+  releases: PublicArtistRelease[];
+};
+
+export function listArtists() {
+  return request<PublicArtistSummary[]>("/artists");
+}
+
+export function getArtist(slug: string) {
+  return request<PublicArtistDetail>(`/artists/${encodeURIComponent(slug)}`);
+}

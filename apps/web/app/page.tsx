@@ -45,16 +45,24 @@ export default function HomePage() {
     <div className="min-h-dvh overflow-x-hidden bg-akosi-bg font-sans text-akosi-fg">
       <header className="flex items-center justify-between border-b-2 border-akosi-fg/15 px-6 py-5 lg:px-10">
         <AkosiWordmark />
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="border-akosi-fg/20 bg-transparent! text-akosi-fg! hover:bg-akosi-fg/10!"
+        <div className="flex items-center gap-5">
+          <Link
+            href="/artists"
+            className="text-sm font-medium text-akosi-fg transition-colors hover:text-akosi-accent-2"
           >
-            <Link href="/admin/login">Admin login</Link>
-          </Button>
+            Artists
+          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="border-akosi-fg/20 bg-transparent! text-akosi-fg! hover:bg-akosi-fg/10!"
+            >
+              <Link href="/admin/login">Admin login</Link>
+            </Button>
+          </div>
         </div>
       </header>
 
