@@ -102,8 +102,17 @@ export function logout() {
   return request<ChallengeResponse>("/admin/logout", { method: "POST" });
 }
 
+export type Me = { email: string; role: string; passwordSetAt: string | null };
+
 export function me() {
-  return request<{ email: string; role: string }>("/admin/me");
+  return request<Me>("/admin/me");
+}
+
+export function changePassword(currentPassword: string, newPassword: string) {
+  return request<{ ok: true }>("/admin/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
 }
 
 // --- Catalog (artists / releases / tracks / media) ---

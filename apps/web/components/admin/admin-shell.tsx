@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CreditCardIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
+import { CreditCardIcon, LayoutDashboardIcon, SettingsIcon, UsersIcon } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AkosiWordmark } from "./wordmark";
 import { ThemeToggle } from "./theme-toggle";
@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon },
   { href: "/admin/artists", label: "Artists", icon: UsersIcon },
   { href: "/admin/cards", label: "Cards", icon: CreditCardIcon },
+  { href: "/admin/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
 function emailInitials(email: string): string {
@@ -74,12 +75,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b-2 border-akosi-fg/10 px-8 py-3.5">
           <ThemeToggle />
-          <div className="flex items-center gap-2.5 rounded-full border border-akosi-fg/10 bg-akosi-surface py-1 pr-3 pl-1">
+          <Link
+            href="/admin/settings"
+            className="flex items-center gap-2.5 rounded-full border border-akosi-fg/10 bg-akosi-surface py-1 pr-3 pl-1 transition-colors hover:border-akosi-accent-2/40"
+          >
             <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-akosi-accent to-akosi-accent-2 text-xs font-medium text-white">
               {emailInitials(email)}
             </div>
             <span className="text-sm text-akosi-fg">{email}</span>
-          </div>
+          </Link>
           <Button
             variant="ghost"
             size="sm"

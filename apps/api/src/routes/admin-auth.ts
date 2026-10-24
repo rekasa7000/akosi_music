@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
-import { verify as verifyPasswordHash } from "argon2";
+import { hash, verify as verifyPasswordHash } from "argon2";
 import { prisma } from "@akosi/database";
 import {
   beginAccountSetup,
@@ -295,7 +295,11 @@ export async function adminAuthRoutes(app: FastifyInstance) {
       preHandler: requireAdminSession,
       schema: {
         response: {
-          200: Type.Object({ email: Type.String(), role: Type.String() }),
+          200: Type.Object({
+            email: Type.String(),
+            role: Type.String(),
+            passwordSetAt: Type.Union([Type.String(), Type.Null()]),
+          }),
         },
       },
     },
@@ -303,7 +307,56 @@ export async function adminAuthRoutes(app: FastifyInstance) {
       const user = await prisma.user.findUniqueOrThrow({
         where: { id: request.adminUserId! },
       });
-      return { email: user.email, role: user.role };
+      return {
+        email: user.email,
+        role: user.role,
+        passwordSetAt: user.passwordSetAt?.toISOString() ?? null,
+      };
+    },
+  );
+
+  // Self-serve rotation for an already-logged-in admin — distinct from
+  // /admin/setup/password, which only exists inside the first-login
+  // challenge flow and can't be reached once passwordSetAt is set.
+  // Requires the current password (not just an active session) so a
+  // hijacked-but-unlocked browser tab can't silently take over the
+  // account by changing the password out from under the real admin.
+  typedApp.post(
+    "/admin/change-password",
+    {
+      preHandler: requireAdminSession,
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+      schema: {
+        body: Type.Object({
+          currentPassword: Type.String({ minLength: 1 }),
+          newPassword: Type.String({ minLength: 12 }),
+        }),
+        response: { 200: Type.Object({ ok: Type.Literal(true) }), 403: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      const { currentPassword, newPassword } = request.body;
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: request.adminUserId! } });
+
+      const currentOk =
+        user.passwordHash != null && (await verifyPasswordHash(user.passwordHash, currentPassword));
+      if (!currentOk) {
+        // 403, not 401 — the session itself is valid (requireAdminSession
+        // already passed); only this specific action is denied. The web
+        // client treats any 401 outside /admin/login|/admin/me as a dead
+        // session and force-redirects to the login page, which would
+        // otherwise fire on every mistyped current password instead of
+        // showing the inline error.
+        return reply.code(403).send({ error: "Current password is incorrect." });
+      }
+
+      const passwordHash = await hash(newPassword);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, passwordSetAt: new Date() },
+      });
+
+      return { ok: true as const };
     },
   );
 }
