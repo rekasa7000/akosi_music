@@ -128,6 +128,8 @@ export type Artist = {
   websiteUrl: string | null;
   instagramUrl: string | null;
   twitterUrl: string | null;
+  facebookUrl: string | null;
+  spotifyUrl: string | null;
   createdAt: string;
 };
 
@@ -339,6 +341,8 @@ export function updateArtist(
     websiteUrl?: string | null;
     instagramUrl?: string | null;
     twitterUrl?: string | null;
+    facebookUrl?: string | null;
+    spotifyUrl?: string | null;
     profileImageKey?: string;
     coverImageKey?: string;
   },

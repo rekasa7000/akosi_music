@@ -196,6 +196,18 @@ export default function ArtistDetailPage() {
                 defaultValue={artist.twitterUrl}
                 onSave={(twitterUrl) => patchArtist({ twitterUrl: twitterUrl || null })}
               />
+              <LinkField
+                id="artist-facebook"
+                label="Facebook"
+                defaultValue={artist.facebookUrl}
+                onSave={(facebookUrl) => patchArtist({ facebookUrl: facebookUrl || null })}
+              />
+              <LinkField
+                id="artist-spotify"
+                label="Spotify"
+                defaultValue={artist.spotifyUrl}
+                onSave={(spotifyUrl) => patchArtist({ spotifyUrl: spotifyUrl || null })}
+              />
             </div>
           </div>
 

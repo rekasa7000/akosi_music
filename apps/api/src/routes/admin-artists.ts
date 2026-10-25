@@ -22,6 +22,8 @@ const Artist = Type.Object({
   websiteUrl: Type.Union([Type.String(), Type.Null()]),
   instagramUrl: Type.Union([Type.String(), Type.Null()]),
   twitterUrl: Type.Union([Type.String(), Type.Null()]),
+  facebookUrl: Type.Union([Type.String(), Type.Null()]),
+  spotifyUrl: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String(),
 });
 
@@ -46,6 +48,8 @@ async function serializeArtist(artist: {
   websiteUrl: string | null;
   instagramUrl: string | null;
   twitterUrl: string | null;
+  facebookUrl: string | null;
+  spotifyUrl: string | null;
   createdAt: Date;
 }) {
   return {
@@ -58,6 +62,8 @@ async function serializeArtist(artist: {
     websiteUrl: artist.websiteUrl,
     instagramUrl: artist.instagramUrl,
     twitterUrl: artist.twitterUrl,
+    facebookUrl: artist.facebookUrl,
+    spotifyUrl: artist.spotifyUrl,
     createdAt: artist.createdAt.toISOString(),
   };
 }
@@ -228,6 +234,8 @@ export async function adminArtistRoutes(app: FastifyInstance) {
           websiteUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
           instagramUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
           twitterUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
+          facebookUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
+          spotifyUrl: Type.Optional(Type.Union([UrlField, Type.Null()])),
           profileImageKey: Type.Optional(Type.String()),
           coverImageKey: Type.Optional(Type.String()),
         }),
@@ -240,13 +248,16 @@ export async function adminArtistRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: "Artist not found." });
       }
 
-      const { bio, websiteUrl, instagramUrl, twitterUrl, profileImageKey, coverImageKey } = request.body;
+      const { bio, websiteUrl, instagramUrl, twitterUrl, facebookUrl, spotifyUrl, profileImageKey, coverImageKey } =
+        request.body;
       const data: Parameters<typeof prisma.artist.update>[0]["data"] = {};
 
       if (bio !== undefined) data.bio = bio;
       if (websiteUrl !== undefined) data.websiteUrl = websiteUrl;
       if (instagramUrl !== undefined) data.instagramUrl = instagramUrl;
       if (twitterUrl !== undefined) data.twitterUrl = twitterUrl;
+      if (facebookUrl !== undefined) data.facebookUrl = facebookUrl;
+      if (spotifyUrl !== undefined) data.spotifyUrl = spotifyUrl;
 
       for (const [key, purpose] of [
         [profileImageKey, "artist-profile"],
