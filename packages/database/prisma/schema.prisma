@@ -129,6 +129,8 @@ model Artist {
   websiteUrl      String?
   instagramUrl    String?
   twitterUrl      String?
+  facebookUrl     String?
+  spotifyUrl      String?
   invitedAt  DateTime  @default(now())
   approvedAt DateTime?
   createdAt  DateTime  @default(now())
