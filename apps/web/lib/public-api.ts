@@ -21,12 +21,22 @@ export type PublicTrack = {
   coverUrl: string | null;
 };
 
+export type PublicArtistInfo = {
+  name: string;
+  bio: string | null;
+  profileImageUrl: string | null;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
+  spotifyUrl: string | null;
+};
+
 export type PublicRelease = {
   id: string;
   title: string;
   artistName: string;
   releasedAt: string | null;
   coverUrl: string | null;
+  artist: PublicArtistInfo;
   tracks: PublicTrack[];
 };
 

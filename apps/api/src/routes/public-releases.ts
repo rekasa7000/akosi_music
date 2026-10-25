@@ -22,12 +22,24 @@ const PublicTrack = Type.Object({
   coverUrl: Type.Union([Type.String(), Type.Null()]),
 });
 
+const PublicArtistInfo = Type.Object({
+  name: Type.String(),
+  bio: Type.Union([Type.String(), Type.Null()]),
+  profileImageUrl: Type.Union([Type.String(), Type.Null()]),
+  facebookUrl: Type.Union([Type.String(), Type.Null()]),
+  instagramUrl: Type.Union([Type.String(), Type.Null()]),
+  spotifyUrl: Type.Union([Type.String(), Type.Null()]),
+});
+
 const PublicRelease = Type.Object({
   id: Type.String(),
   title: Type.String(),
+  // Kept alongside the richer `artist` object below — existing
+  // consumers (the plain /r/[id] release page) only need the name.
   artistName: Type.String(),
   releasedAt: Type.Union([Type.String(), Type.Null()]),
   coverUrl: Type.Union([Type.String(), Type.Null()]),
+  artist: PublicArtistInfo,
   tracks: Type.Array(PublicTrack),
 });
 
@@ -113,6 +125,14 @@ export async function publicReleaseRoutes(app: FastifyInstance) {
         artistName: release.artist.name,
         releasedAt: release.releasedAt?.toISOString() ?? null,
         coverUrl: await resolveCoverUrl(release.coverImageKey),
+        artist: {
+          name: release.artist.name,
+          bio: release.artist.bio,
+          profileImageUrl: await resolveCoverUrl(release.artist.profileImageKey),
+          facebookUrl: release.artist.facebookUrl,
+          instagramUrl: release.artist.instagramUrl,
+          spotifyUrl: release.artist.spotifyUrl,
+        },
         tracks,
       };
     },
