@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { prisma } from "@akosi/database";
 
 export const SESSION_COOKIE_NAME = "akosi_admin_session";
 const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12h — admin-only, no refresh token
@@ -10,7 +11,7 @@ declare module "fastify" {
   }
 }
 
-type SessionPayload = { type: typeof TOKEN_TYPE; sub: string };
+type SessionPayload = { type: typeof TOKEN_TYPE; sub: string; iat: number };
 
 // This cookie and the fan-unlock cookie (fan-unlock.ts) are both JWTs
 // signed with the same app-wide secret — without a type tag, a token
@@ -19,7 +20,9 @@ type SessionPayload = { type: typeof TOKEN_TYPE; sub: string };
 // review). Checking "type" explicitly, not just trusting whatever
 // `sub` happens to be on the decoded payload, closes that off.
 function isSessionPayload(payload: Record<string, unknown>): payload is SessionPayload {
-  return payload.type === TOKEN_TYPE && typeof payload.sub === "string";
+  return (
+    payload.type === TOKEN_TYPE && typeof payload.sub === "string" && typeof payload.iat === "number"
+  );
 }
 
 export async function issueSession(
@@ -58,6 +61,33 @@ export async function requireAdminSession(
     if (!isSessionPayload(payload)) {
       return reply.code(401).send({ error: "Session expired or invalid." });
     }
+
+    // Stateless JWTs have no server-side revocation list, so a stolen
+    // or otherwise-still-open session would normally outlive a
+    // password change entirely — the whole point of changing a
+    // password after a suspected compromise is to kick everyone else
+    // out. A token issued before the most recent passwordSetAt is
+    // treated as revoked; /admin/change-password reissues a fresh
+    // token for the session that actually made the change, so that
+    // one stays logged in while every other one doesn't.
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { passwordSetAt: true },
+    });
+    // JWT `iat` has whole-second precision (truncated, per spec) while
+    // passwordSetAt keeps milliseconds — comparing them raw means a
+    // token reissued in the very same second as the password change
+    // (the common case: /admin/change-password reissues immediately
+    // after writing passwordSetAt) looks "earlier" purely from
+    // truncation, not any real ordering. Flooring passwordSetAt to
+    // whole seconds too puts both sides on the same footing.
+    const passwordSetAtSeconds = user?.passwordSetAt
+      ? Math.floor(user.passwordSetAt.getTime() / 1000)
+      : null;
+    if (passwordSetAtSeconds !== null && payload.iat < passwordSetAtSeconds) {
+      return reply.code(401).send({ error: "Session expired or invalid." });
+    }
+
     request.adminUserId = payload.sub;
   } catch {
     return reply.code(401).send({ error: "Session expired or invalid." });

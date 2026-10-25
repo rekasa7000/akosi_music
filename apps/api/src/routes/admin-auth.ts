@@ -356,6 +356,14 @@ export async function adminAuthRoutes(app: FastifyInstance) {
         data: { passwordHash, passwordSetAt: new Date() },
       });
 
+      // requireAdminSession rejects any token issued before the
+      // passwordSetAt just written above — that's what revokes every
+      // other open session, but it would just as readily revoke this
+      // one on its very next request. Reissuing here gives this
+      // browser a fresh token stamped after the change, so the admin
+      // who actually made the change stays logged in.
+      await issueSession(app, reply, user.id);
+
       return { ok: true as const };
     },
   );
