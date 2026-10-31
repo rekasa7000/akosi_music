@@ -9,6 +9,10 @@ const FeedbackType = Type.Union([Type.Literal("ERROR"), Type.Literal("FEEDBACK")
 const SubmitFeedbackBody = Type.Object({
   type: FeedbackType,
   message: Type.String({ minLength: 1, maxLength: 2000 }),
+  // FEEDBACK only — a rating on an ERROR report doesn't mean anything,
+  // but this is intentionally not type-conditional at the schema
+  // level: the client just never sends it for ERROR.
+  rating: Type.Optional(Type.Integer({ minimum: 1, maximum: 5 })),
   contactEmail: Type.Optional(Type.String({ format: "email" })),
   releaseId: Type.Optional(Type.String()),
   trackId: Type.Optional(Type.String()),
@@ -32,10 +36,10 @@ export async function publicFeedbackRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { type, message, contactEmail, releaseId, trackId } = request.body;
+      const { type, message, rating, contactEmail, releaseId, trackId } = request.body;
 
       await prisma.feedbackSubmission.create({
-        data: { type, message, contactEmail, releaseId, trackId },
+        data: { type, message, rating, contactEmail, releaseId, trackId },
       });
 
       // Best-effort notification — the row above is the actual record
@@ -54,6 +58,7 @@ export async function publicFeedbackRoutes(app: FastifyInstance) {
             to: admin.email,
             subject: type === "ERROR" ? "New error report" : "New feedback",
             text: [
+              rating ? `Rating: ${rating}/5` : null,
               message,
               contactEmail ? `\nReply to: ${contactEmail}` : null,
               releaseId ? `Release: ${releaseId}` : null,

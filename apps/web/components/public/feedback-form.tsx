@@ -1,12 +1,39 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { CheckCircle2Icon } from "lucide-react";
+import { CheckCircle2Icon, StarIcon } from "lucide-react";
 import * as api from "@/lib/public-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+
+function StarRating({ value, onChange }: { value: number | null; onChange: (value: number) => void }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const shown = hovered ?? value ?? 0;
+
+  return (
+    <div className="flex gap-1" onMouseLeave={() => setHovered(null)}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          aria-label={`${n} star${n === 1 ? "" : "s"}`}
+          onMouseEnter={() => setHovered(n)}
+          onClick={() => onChange(n)}
+          className="p-0.5"
+        >
+          <StarIcon
+            className={cn("size-7 transition-colors", n <= shown ? "text-akosi-accent-2" : "text-akosi-fg/20")}
+            fill={n <= shown ? "currentColor" : "none"}
+            strokeWidth={1.5}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function FeedbackForm({
   type,
@@ -26,6 +53,7 @@ export function FeedbackForm({
   trackId?: string | null;
 }) {
   const [message, setMessage] = useState("");
+  const [rating, setRating] = useState<number | null>(null);
   const [contactEmail, setContactEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,6 +67,7 @@ export function FeedbackForm({
       await api.submitFeedback({
         type,
         message,
+        rating: type === "FEEDBACK" ? (rating ?? undefined) : undefined,
         contactEmail: contactEmail || undefined,
         releaseId: releaseId ?? undefined,
         trackId: trackId ?? undefined,
@@ -69,6 +98,13 @@ export function FeedbackForm({
       <p className="mt-1.5 text-sm text-akosi-muted-fg">{description}</p>
 
       <form className="mt-8 flex flex-col gap-5" onSubmit={handleSubmit}>
+        {type === "FEEDBACK" ? (
+          <div className="flex flex-col gap-2">
+            <Label>How would you rate it? (optional)</Label>
+            <StarRating value={rating} onChange={setRating} />
+          </div>
+        ) : null}
+
         <div className="flex flex-col gap-2">
           <Label htmlFor="feedback-message">{messageLabel}</Label>
           <Textarea

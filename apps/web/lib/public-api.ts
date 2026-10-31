@@ -127,6 +127,7 @@ export type FeedbackType = "ERROR" | "FEEDBACK";
 export function submitFeedback(params: {
   type: FeedbackType;
   message: string;
+  rating?: number;
   contactEmail?: string;
   releaseId?: string;
   trackId?: string;

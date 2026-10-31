@@ -252,6 +252,9 @@ model FeedbackSubmission {
   id      String       @id @default(cuid())
   type    FeedbackType
   message String
+  // 1-5, FEEDBACK only — a rating doesn't mean anything on an ERROR
+  // report, so the form never collects it for that type.
+  rating  Int?
   // Optional — only set if the fan wants a reply. No fan accounts
   // exist yet (see PlayEvent.userId), so this is free text, not a
   // relation.
