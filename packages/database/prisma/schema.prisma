@@ -46,6 +46,11 @@ enum AdminAuthChallengeMethod {
   TOTP
 }
 
+enum FeedbackType {
+  ERROR
+  FEEDBACK
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -241,6 +246,24 @@ model CardOwnership {
   user User @relation(fields: [userId], references: [id])
 
   @@map("card_ownerships")
+}
+
+model FeedbackSubmission {
+  id      String       @id @default(cuid())
+  type    FeedbackType
+  message String
+  // Optional — only set if the fan wants a reply. No fan accounts
+  // exist yet (see PlayEvent.userId), so this is free text, not a
+  // relation.
+  contactEmail String?
+  // Best-effort context about what the fan was looking at, not a
+  // hard relation — a release/track can be deleted later without
+  // invalidating the feedback that mentioned it.
+  releaseId String?
+  trackId   String?
+  createdAt DateTime @default(now())
+
+  @@map("feedback_submissions")
 }
 
 model PlayEvent {
