@@ -201,7 +201,12 @@ export default function TapLandingPage() {
           </div>
 
           <div className="border-t-2 border-akosi-fg/10">
-            <TapInfoPanel artist={release.artist} lyrics={nowPlayingTrack.lyrics} />
+            <TapInfoPanel
+              artist={release.artist}
+              lyrics={nowPlayingTrack.lyrics}
+              releaseId={release.id}
+              trackId={nowPlayingTrack.id}
+            />
           </div>
         </>
       )}

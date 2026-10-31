@@ -121,3 +121,15 @@ export function listArtists() {
 export function getArtist(slug: string) {
   return request<PublicArtistDetail>(`/artists/${encodeURIComponent(slug)}`);
 }
+
+export type FeedbackType = "ERROR" | "FEEDBACK";
+
+export function submitFeedback(params: {
+  type: FeedbackType;
+  message: string;
+  contactEmail?: string;
+  releaseId?: string;
+  trackId?: string;
+}) {
+  return request<{ ok: true }>("/feedback", { method: "POST", body: JSON.stringify(params) });
+}

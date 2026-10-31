@@ -23,11 +23,16 @@ function SocialPill({ href, label }: { href: string | null; label: string }) {
 export function TapInfoPanel({
   artist,
   lyrics,
+  releaseId,
+  trackId,
 }: {
   artist: PublicArtistInfo;
   lyrics: string | null;
+  releaseId: string;
+  trackId: string;
 }) {
   const [tab, setTab] = useState<"artist" | "lyrics">("artist");
+  const feedbackQuery = `?releaseId=${encodeURIComponent(releaseId)}&trackId=${encodeURIComponent(trackId)}`;
 
   return (
     <div className="px-5 py-6">
@@ -105,18 +110,20 @@ export function TapInfoPanel({
         <p className="font-display text-lg font-bold text-akosi-fg">Your feedback matters to us!</p>
         <p className="mt-1 text-sm text-akosi-muted-fg">Report any issues or share us your thoughts.</p>
         <div className="mt-4 flex flex-wrap gap-2.5">
-          <a
-            href="#"
+          <Link
+            href={`/report${feedbackQuery}`}
+            target="_blank"
             className="rounded-full border border-akosi-fg/20 px-4 py-2 text-sm font-medium text-akosi-fg transition-colors hover:border-akosi-accent-2/40 hover:text-akosi-accent-2"
           >
             Error Form
-          </a>
-          <a
-            href="#"
+          </Link>
+          <Link
+            href={`/feedback${feedbackQuery}`}
+            target="_blank"
             className="rounded-full border border-akosi-fg/20 px-4 py-2 text-sm font-medium text-akosi-fg transition-colors hover:border-akosi-accent-2/40 hover:text-akosi-accent-2"
           >
             Feedback Form
-          </a>
+          </Link>
         </div>
       </div>
 
