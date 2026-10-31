@@ -1,10 +1,120 @@
-# Deployment (early, cost-optimized)
+# Deployment
+
+This doc covers two separate decisions, in order: the **production
+launch deploy** (below), sized against the real card volume now known,
+and the **early, cost-optimized staging deploy** (further down) used to
+get the app reachable before that volume mattered.
+
+## Production launch deploy
+
+Per `07-timeline.md`, cards arrive and get encoded in Apr '27 for a Jun
+'27 launch. The business plan is **~1,000 cards at launch, then ~1,000
+more every quarter** — this section sizes the backend against that
+number rather than guessing.
+
+### The capacity math
+
+A tap only costs the API 2–3 cheap, single-row-indexed lookups —
+redeem the card's UID → fetch the release → mint a presigned playback
+URL. The audio/video bytes themselves are served directly from object
+storage via that presigned URL, never proxied through the API (see
+`storage.ts` / the storage-adapter rule in `04-tech-stack.md`), so
+media bandwidth never touches API capacity planning at all.
+
+| Scenario | Taps/sec | API requests/sec (×2–3 per tap) |
+|---|---|---|
+| Realistic: 1,000 cards tapped over days/weeks after a drop | well under 1 | well under 1 |
+| Concentrated: all 1,000 tapped within a 10-minute launch window | ~1.7 | ~5 |
+| Worst case: a flash-mob tap, all 1,000 within 60 seconds | ~16.7 | ~50 |
+
+Even the worst case is trivial for one small, always-on Node instance,
+and the same is true on the database side — a few indexed single-row
+Postgres lookups per tap, nothing a shared-CPU managed Postgres
+notices. The quarterly repeat doesn't compound this into a scaling
+problem either: it's the same ~1,000-card burst shape recurring, not
+cumulative concurrent load (cumulative *row count* growth — ~4,000
+cards/year — is likewise trivial for an indexed table over several
+years).
+
+**Conclusion: at this volume, capacity is not the deciding factor.**
+Any reasonable host — the team's existing self-hosted setup or a
+managed PaaS — handles it with large headroom. The decision criteria
+that actually matter here are:
+
+1. **No cold starts.** A tap is a one-shot, in-the-moment UX ("tap
+   card → instant Now Playing") — a platform that can go cold between
+   taps (serverless functions: Cloud Run's scale-to-zero, Lambda,
+   Vercel functions) risks a multi-second stall on an infrequently
+   tapped card, which hurts this specific UX far more than raw
+   capacity headroom ever would. This also means the early staging
+   deploy's Cloud Run choice below should **not** carry over to
+   production as-is — it was picked there for its free tier while
+   traffic was near-zero, not for production fit.
+2. **Zero-downtime deploys with a migration step**, since the
+   quarterly card drop means new catalog data and (occasionally)
+   schema changes ship on a recurring cadence, not once.
+3. **Ops load matching a part-time team.**
+
+### Recommendation — and a conflict worth resolving
+
+`04-tech-stack.md` / `03-architecture.md` already name **Docker +
+Coolify + Traefik, self-hosted** as the team's default, existing setup.
+That default already satisfies criterion 1 (always-on, no cold start)
+— so the capacity math above does **not**, by itself, argue for moving
+off it. If the team is already operating that host day-to-day, staying
+on it is a perfectly good fit for 1,000-cards-a-quarter traffic.
+
+The alternative worth naming explicitly: a small always-on instance on
+a managed PaaS (**Render** or **Railway**) over heavier AWS
+self-managed compute (ECS/Fargate) — Fargate-level orchestration is
+unnecessary ops overhead for a single-digit-to-double-digit-req/sec
+service, while Render/Railway give the same "no cold start" property
+with a simpler deploy story (git push → zero-downtime rollout,
+built-in preview/staging environments for testing each quarter's card
+batch before it goes live).
+
+**Which of the two wins depends on something math can't answer: does
+the team want to keep operating its own Coolify host, or hand that off
+to a managed platform?** Pick Coolify (zero new cost, matches existing
+ops muscle) unless the team would rather not be the one patching and
+monitoring that host long-term, in which case Render is the fallback.
+
+### Production stack (either hosting choice)
+
+| Layer | Pick | Why |
+|---|---|---|
+| Web + API hosting | Existing Coolify/Traefik host, **or** Render/Railway small instance | See conflict above — always-on either way, no cold start |
+| Database | Managed Postgres on the same host (Coolify), or Render/Railway's managed Postgres | Shared-CPU tier is enough per the math above |
+| Object storage | Real **AWS S3** (not LocalStack) | Already the intended target per `04-tech-stack.md` Path A; `storage.ts`'s presigned-URL pattern needs no code change, only env vars |
+| CDN / signed delivery | Skip at launch | Per `04-tech-stack.md` Path B's logic — add CloudFront only once real traffic, not card count, justifies it |
+| Secrets | Coolify's env var store, or the chosen PaaS's secret manager | Never a plaintext `.env` in production, per the key-storage rule in `04-tech-stack.md` |
+| CI/CD | GitHub Actions | Build, run `prisma migrate deploy`, then roll out — same pipeline regardless of hosting choice |
+
+### Implementation status
+
+- ⬜ Resolve the Coolify-vs-Render question with the team
+- ⬜ Dockerfile for `apps/api` (multi-stage: install → `tsc` build →
+  slim runtime image running `node dist/index.js`)
+- ⬜ Dockerfile for `apps/web` (standard Next.js production Docker
+  pattern)
+- ⬜ Real AWS S3 buckets provisioned (`akosi-raw`, `akosi-media`),
+  replacing LocalStack
+- ⬜ GitHub Actions workflow: build, `prisma migrate deploy`,
+  zero-downtime deploy on push to `main`
+- ⬜ Load-test the worst-case scenario above (1,000 synthetic taps in
+  under a minute) against whichever host is chosen, to confirm the
+  math rather than assume it
+- ⬜ Admin bootstrap run once against the production database
+
+---
+
+## Early, cost-optimized staging deploy
 
 This documents the hosting decision for getting the app reachable from
 outside a local machine **now** — a staging/demo deploy to show
 progress and let people other than the admin poke at it. It is not the
-production launch architecture: per `07-timeline.md`, cards don't exist
-until Apr '27 and launch is Jun '27, so this deploy only needs to carry
+production launch architecture (see above): per `07-timeline.md`,
+cards don't exist until Apr '27, so this deploy only needs to carry
 admin usage and a small amount of browsing traffic, not real NFC
 redemption volume.
 
