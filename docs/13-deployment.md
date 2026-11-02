@@ -125,12 +125,17 @@ continuity risk if that reimbursement arrangement ever changes.
 ## Implementation status
 
 - ✅ `apps/web/vercel.json` — Vercel build config for the monorepo
-- ⬜ Dockerfile for `apps/api` (multi-stage: install → `tsc` build →
-  slim runtime image running `node dist/index.js`) — Render can build
-  from a Dockerfile or its own Node buildpack; a Dockerfile gives more
-  control over the production image
-- ⬜ Render service created, Root Directory `apps/api`, Pre-Deploy
-  Command set to `prisma migrate deploy`
+- ✅ `apps/api/Dockerfile` — multi-stage, build-verified locally
+  (`docker build` + `docker run` against the real local Postgres/
+  LocalStack/Mailpit stack, confirmed DB queries and presigned URL
+  generation both work from inside the container). Not pruned to
+  production-only dependencies — `prisma`, a devDependency, is needed
+  at runtime for the Pre-Deploy Command below, so trimming the image
+  needs more care than a blind `pnpm prune --prod`.
+- ✅ `render.yaml` — Blueprint config: Docker runtime, health check at
+  `/health`, Pre-Deploy Command runs `prisma migrate deploy`
+- ⬜ Render service actually created from the Blueprint (needs a
+  Render account — see Accounts needed below)
 - ⬜ Vercel project imported, Root Directory `apps/web`,
   `NEXT_PUBLIC_API_URL` set (needs the Render API URL first)
 - ⬜ Real R2 buckets provisioned (`akosi-raw`, `akosi-media`),
