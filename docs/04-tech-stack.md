@@ -84,15 +84,10 @@ update environment configuration with the GCS/Cloud SQL/Cloud Run
 variables from Path B above and note the decision wherever environment
 variables are documented for the project.
 
-For getting an early staging deploy live at $0 — before this decision
-needs to be final — see `13-deployment.md`, which uses Cloud Run for
-compute but swaps Cloud SQL and Cloud Storage for providers with a
-real permanent free tier.
-
-For the production launch deploy, sized against the actual card volume
-(~1,000 cards at launch, ~1,000/quarter after), see the "Production
-launch deploy" section at the top of `13-deployment.md` — the capacity
-math there shows traffic isn't the deciding factor at this volume, so
-the open question is narrower than Path A vs. Path B: whether to stay
-on the self-hosted Coolify host named above, or move this specific
-service to a managed PaaS (Render/Railway) instead.
+This project's actual deploy deviates from this default — see
+`13-deployment.md` for the decided stack (Vercel + Render + Neon +
+Cloudflare R2 + Resend) and why each layer departs from Path A, sized
+against the actual card volume (~1,000 cards at launch, ~1,000/quarter
+after). The capacity math there shows traffic isn't what's driving
+these choices at this volume — cost ownership and avoiding cold starts
+are.

@@ -1,25 +1,59 @@
 # Deployment
 
-This doc covers two separate decisions, in order: the **production
-launch deploy** (below), sized against the real card volume now known,
-and the **early, cost-optimized staging deploy** (further down) used to
-get the app reachable before that volume mattered.
+**Decided stack: Vercel Pro (web) + Render (API) + Neon (Postgres) +
+Cloudflare R2 (storage) + Resend via SMTP (email).** This is the real
+production deploy, live from day one — not a temporary staging setup
+replaced later. The sections below explain why each piece was picked
+and what's left to actually stand it up.
 
-## Production launch deploy
+## Why this combination, not `04-tech-stack.md`'s default
 
-Per `07-timeline.md`, cards arrive and get encoded in Apr '27 for a Jun
-'27 launch. The business plan is **~1,000 cards at launch, then ~1,000
-more every quarter** — this section sizes the backend against that
-number rather than guessing.
+`04-tech-stack.md` / `03-architecture.md` name **Docker + Coolify +
+Traefik, self-hosted** as the team's default. This deploy deviates from
+that default on every layer, for reasons specific to this project, not
+because the default is wrong in general:
 
-### The capacity math
+- **Web on Vercel**, not Coolify — the web app's hosting cost is
+  already covered independent of this project's budget, and Vercel is
+  Next.js's native platform (PR preview deploys, zero-config builds).
+  Vercel's Hobby (free) tier is off-limits for a commercial product
+  per its Terms of Service (confirmed current as of Oct 2026) — this
+  deploy uses a **Pro** subscription, which is explicitly licensed for
+  commercial use, so that restriction doesn't apply here.
+- **API on Render**, not Coolify — once web is off Coolify, the API
+  alone costs ~$7/month on Render's Starter tier, which is cheap
+  enough that the "keep operating our own host" argument for Coolify
+  (made in an earlier draft of this doc) no longer carries much
+  weight. Render gives zero-downtime git-push deploys without
+  maintaining a host.
+- **Storage on Cloudflare R2, not AWS S3** — deviates from
+  `04-tech-stack.md` Path A's default pick. R2's permanent free tier
+  (10GB) plus **zero egress fees ever** fits this app's shape
+  (streaming audio/video, where egress is the cost that scales with
+  usage) better than S3's pay-per-GB egress. `apps/api/src/storage.ts`
+  already talks to S3 through the standard AWS SDK, configured
+  entirely through env vars (`S3_ENDPOINT`, `S3_REGION`,
+  `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_RAW`,
+  `S3_BUCKET_MEDIA`) — R2 implements the S3 API, so this is an env var
+  change, not a code change. Same would be true of a later move to
+  real AWS S3.
+- **Email via Resend's SMTP relay**, not their HTTP API/SDK —
+  `apps/api/src/auth/mailer.ts` already speaks SMTP through
+  `nodemailer` (that's how it reaches Mailpit in dev). Resend's SMTP
+  relay (`smtp.resend.com`) is a drop-in replacement for that — an env
+  var change (`SMTP_HOST`/`SMTP_PORT` + credentials), not a rewrite.
+  Their native SDK would mean rewriting `mailer.ts` to gain things
+  (open tracking, webhooks) this app doesn't need yet for a single
+  transactional OTP email.
 
-A tap only costs the API 2–3 cheap, single-row-indexed lookups —
-redeem the card's UID → fetch the release → mint a presigned playback
-URL. The audio/video bytes themselves are served directly from object
-storage via that presigned URL, never proxied through the API (see
-`storage.ts` / the storage-adapter rule in `04-tech-stack.md`), so
-media bandwidth never touches API capacity planning at all.
+## The capacity math (why Render's smallest tier is enough)
+
+Per `07-timeline.md`, the business plan is **~1,000 cards at launch,
+then ~1,000 more every quarter**. A tap only costs the API 2–3 cheap,
+single-row-indexed lookups — redeem the card's UID → fetch the release
+→ mint a presigned playback URL. The audio/video bytes themselves are
+served directly from R2 via that presigned URL, never proxied through
+the API, so media bandwidth never touches API capacity planning.
 
 | Scenario | Taps/sec | API requests/sec (×2–3 per tap) |
 |---|---|---|
@@ -27,177 +61,89 @@ media bandwidth never touches API capacity planning at all.
 | Concentrated: all 1,000 tapped within a 10-minute launch window | ~1.7 | ~5 |
 | Worst case: a flash-mob tap, all 1,000 within 60 seconds | ~16.7 | ~50 |
 
-Even the worst case is trivial for one small, always-on Node instance,
+Even the worst case is trivial for Render's smallest always-on tier,
 and the same is true on the database side — a few indexed single-row
-Postgres lookups per tap, nothing a shared-CPU managed Postgres
-notices. The quarterly repeat doesn't compound this into a scaling
-problem either: it's the same ~1,000-card burst shape recurring, not
-cumulative concurrent load (cumulative *row count* growth — ~4,000
-cards/year — is likewise trivial for an indexed table over several
-years).
+Postgres lookups per tap, nothing a shared-CPU Neon instance notices.
+The quarterly repeat doesn't compound this into a scaling problem
+either: it's the same ~1,000-card burst shape recurring, not
+cumulative concurrent load.
 
-**Conclusion: at this volume, capacity is not the deciding factor.**
-Any reasonable host — the team's existing self-hosted setup or a
-managed PaaS — handles it with large headroom. The decision criteria
-that actually matter here are:
-
-1. **No cold starts.** A tap is a one-shot, in-the-moment UX ("tap
-   card → instant Now Playing") — a platform that can go cold between
-   taps (serverless functions: Cloud Run's scale-to-zero, Lambda,
-   Vercel functions) risks a multi-second stall on an infrequently
-   tapped card, which hurts this specific UX far more than raw
-   capacity headroom ever would. This also means the early staging
-   deploy's Cloud Run choice below should **not** carry over to
-   production as-is — it was picked there for its free tier while
-   traffic was near-zero, not for production fit.
-2. **Zero-downtime deploys with a migration step**, since the
-   quarterly card drop means new catalog data and (occasionally)
-   schema changes ship on a recurring cadence, not once.
-3. **Ops load matching a part-time team.**
-
-### Recommendation — and a conflict worth resolving
-
-`04-tech-stack.md` / `03-architecture.md` already name **Docker +
-Coolify + Traefik, self-hosted** as the team's default, existing setup.
-That default already satisfies criterion 1 (always-on, no cold start)
-— so the capacity math above does **not**, by itself, argue for moving
-off it. If the team is already operating that host day-to-day, staying
-on it is a perfectly good fit for 1,000-cards-a-quarter traffic.
-
-The alternative worth naming explicitly: a small always-on instance on
-a managed PaaS (**Render** or **Railway**) over heavier AWS
-self-managed compute (ECS/Fargate) — Fargate-level orchestration is
-unnecessary ops overhead for a single-digit-to-double-digit-req/sec
-service, while Render/Railway give the same "no cold start" property
-with a simpler deploy story (git push → zero-downtime rollout,
-built-in preview/staging environments for testing each quarter's card
-batch before it goes live).
-
-**Which of the two wins depends on something math can't answer: does
-the team want to keep operating its own Coolify host, or hand that off
-to a managed platform?** Pick Coolify (zero new cost, matches existing
-ops muscle) unless the team would rather not be the one patching and
-monitoring that host long-term, in which case Render is the fallback.
-
-### Production stack (either hosting choice)
-
-| Layer | Pick | Why |
-|---|---|---|
-| Web + API hosting | Existing Coolify/Traefik host, **or** Render/Railway small instance | See conflict above — always-on either way, no cold start |
-| Database | Managed Postgres on the same host (Coolify), or Render/Railway's managed Postgres | Shared-CPU tier is enough per the math above |
-| Object storage | Real **AWS S3** (not LocalStack) | Already the intended target per `04-tech-stack.md` Path A; `storage.ts`'s presigned-URL pattern needs no code change, only env vars |
-| CDN / signed delivery | Skip at launch | Per `04-tech-stack.md` Path B's logic — add CloudFront only once real traffic, not card count, justifies it |
-| Secrets | Coolify's env var store, or the chosen PaaS's secret manager | Never a plaintext `.env` in production, per the key-storage rule in `04-tech-stack.md` |
-| CI/CD | GitHub Actions | Build, run `prisma migrate deploy`, then roll out — same pipeline regardless of hosting choice |
-
-### Implementation status
-
-- ⬜ Resolve the Coolify-vs-Render question with the team
-- ⬜ Dockerfile for `apps/api` (multi-stage: install → `tsc` build →
-  slim runtime image running `node dist/index.js`)
-- ⬜ Dockerfile for `apps/web` (standard Next.js production Docker
-  pattern)
-- ⬜ Real AWS S3 buckets provisioned (`akosi-raw`, `akosi-media`),
-  replacing LocalStack
-- ⬜ GitHub Actions workflow: build, `prisma migrate deploy`,
-  zero-downtime deploy on push to `main`
-- ⬜ Load-test the worst-case scenario above (1,000 synthetic taps in
-  under a minute) against whichever host is chosen, to confirm the
-  math rather than assume it
-- ⬜ Admin bootstrap run once against the production database
-
----
-
-## Early, cost-optimized staging deploy
-
-This documents the hosting decision for getting the app reachable from
-outside a local machine **now** — a staging/demo deploy to show
-progress and let people other than the admin poke at it. It is not the
-production launch architecture (see above): per `07-timeline.md`,
-cards don't exist until Apr '27, so this deploy only needs to carry
-admin usage and a small amount of browsing traffic, not real NFC
-redemption volume.
-
-`04-tech-stack.md` lays out two paths — AWS/self-hosted (Path A,
-default) and GCP (Path B, if using Google Cloud credits). This is a
-**third variant**: GCP for compute, but swapping GCP's own managed
-Postgres and storage for providers with a real permanent free tier,
-since the goal here is "deployable for $0," not "deployable on Google
-credits." Nothing below forecloses a later move to Path A or full
-Path B — see "Switching later" in `04-tech-stack.md`; the same
-isolation argument (don't let a specific provider's SDK leak outside
-the storage adapter) applies here too, and already holds today (see
-below).
+The one thing capacity math doesn't cover, and the actual reason
+Render (not a scale-to-zero platform) was picked for the API: **no
+cold starts.** A tap is a one-shot, in-the-moment UX ("tap card →
+instant Now Playing") — a platform that goes cold between taps
+(Cloud Run, Lambda, Vercel serverless functions) risks a
+multi-second stall on an infrequently tapped card, which hurts this
+specific UX far more than raw capacity headroom ever would.
 
 ## The stack
 
-| Layer | Pick | Why this and not the `04-tech-stack.md` default |
+| Layer | Pick | Why |
 |---|---|---|
-| Web + API hosting | **GCP Cloud Run** | Matches Path B. Generous always-free tier (2M requests/mo, 360k GiB-seconds), scales to zero, no server to patch. Both `apps/web` and `apps/api` already build to a plain `next start` / `node dist/index.js` process — no framework adapter needed. |
-| Database | **Neon** (not Cloud SQL) | Cloud SQL has no permanent free tier — cheapest instance runs ~$10-15/mo, or burns the one-time 90-day/$300 trial and then bills. Neon's free tier is permanent and serverless (scales to zero like Cloud Run does), which is a better match for near-zero traffic than either Cloud SQL or RDS. |
-| Object storage | **Cloudflare R2** (not Cloud Storage / S3) | Free 10GB and, more importantly, **zero egress fees** — this app repeatedly serves audio/video playback, where egress is the cost that actually grows with usage. GCS's free tier is comparable on storage but not on egress. |
-| Email (admin OTP codes) | **Resend** | Free tier (100/day, 3000/mo) comfortably covers admin login codes — the only email this app sends right now (see `12-admin-authentication.md`). |
-| CI/CD | **GitHub Actions** | Free minutes on the repo's plan; builds both apps and deploys to Cloud Run on push to `main`. |
-| Secrets | **GCP Secret Manager** | Free tier (6 active secret versions) covers `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `DATABASE_URL`, R2 credentials, and the Resend API key. Mounted into Cloud Run as env vars at deploy time — never committed, never in a plain `.env` in any real environment (per `04-tech-stack.md`'s key-storage rule). |
+| Web hosting | **Vercel Pro** | Native Next.js platform; cost isn't a factor for this project's budget. See ownership note below. |
+| API hosting | **Render** (Starter tier) | Always-on, no cold start, ~$7/mo, zero-downtime git-push deploys |
+| Database | **Neon** | Permanent free tier (not a trial), works with Prisma via `DATABASE_URL` exactly like local Postgres |
+| Object storage | **Cloudflare R2** | Permanent free 10GB, zero egress fees — see above |
+| Email | **Resend**, via SMTP | Free tier (100/day, 3,000/mo) comfortably covers admin login codes, the only email this app sends today |
+| Secrets | Render's and Vercel's own env var stores | Never a plaintext `.env` in production, per the key-storage rule in `04-tech-stack.md` |
+| CI/CD | Native git-push deploys on both platforms | Neither Vercel nor Render needs a custom GitHub Actions pipeline for deploys — Render supports a **Pre-Deploy Command** (runs `prisma migrate deploy` before the new instance takes traffic), which covers the one thing that actually needs an explicit step |
 
-Explicitly ruled out: **Vercel** for the web app — its Hobby (free)
-tier's terms restrict free usage to non-commercial projects, and this
-is a commercial product. **Railway** — no permanent free tier, just a
-trial credit then flat monthly billing.
+### A note on hosting ownership
 
-## Why no code changes are needed for storage
+The Vercel Pro subscription this deploy uses belongs to the person
+running this project personally, with its cost reimbursed by a third
+party (kloudtech) — not held under kloudtech's own account. That
+matters operationally: ownership and admin access to the live web
+deployment stay with the project, not a vendor, so there's no
+continuity risk if that reimbursement arrangement ever changes.
 
-`apps/api/src/storage.ts` already talks to S3 through the standard AWS
-SDK (`@aws-sdk/client-s3`), configured entirely through env vars
-(`S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
-`S3_BUCKET_RAW`, `S3_BUCKET_MEDIA`) — this is exactly what makes
-LocalStack work in dev today (see `10-project-structure.md`). R2
-implements the S3 API, so switching from LocalStack to R2 is an env
-var change (`S3_ENDPOINT` → the R2 account endpoint, real
-`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`, real bucket names), not a
-code change. Same logic applies if this ever moves to real AWS S3 or
-GCS's S3-interop mode later.
-
-## Accounts needed (the user creates these — can't be done on their
-behalf)
+## Accounts needed (created by whoever owns this deploy — can't be done on their behalf)
 
 | Account | What for | Note |
 |---|---|---|
-| GCP project, billing enabled | Cloud Run (web + api), Secret Manager | A card on file is required to enable billing even though usage should stay inside the always-free tier at this scale. |
-| Neon | Postgres | Free tier project, grab the pooled `DATABASE_URL` connection string. |
-| Cloudflare account, R2 enabled | Object storage | Create two buckets (`akosi-raw`, `akosi-media`, matching dev bucket names) and an R2 API token (access key + secret). |
-| Resend | SMTP for admin OTP emails | Free tier API key; verify a sending domain (or use their sandbox domain for this early deploy). |
+| Vercel, Pro plan | Web hosting | Root Directory set to `apps/web` in the project's settings — see `apps/web/vercel.json` for the monorepo build config |
+| Render | API hosting | Starter tier (always-on); connect the GitHub repo, set Root Directory to `apps/api` |
+| Neon | Postgres | Free tier project, grab the pooled `DATABASE_URL` connection string |
+| Cloudflare, R2 enabled | Object storage | Create two buckets (`akosi-raw`, `akosi-media`, matching dev bucket names) and an R2 API token (access key + secret) |
+| Resend | SMTP relay for admin OTP emails | Free tier API key, used as SMTP credentials; verify a sending domain (or use their sandbox domain until one's ready) |
 
-## Env var mapping (dev → this deploy)
+## Env var mapping (dev → production)
 
-| Var | Dev value | This deploy |
+| Var | Dev value | Production |
 |---|---|---|
 | `DATABASE_URL` | local Postgres via Docker | Neon pooled connection string |
-| `S3_ENDPOINT` | `http://localhost:4566` (LocalStack) | R2 account endpoint (unset entirely if ever moving to real AWS S3 — see the comment already in `apps/api/.env.example`) |
+| `S3_ENDPOINT` | `http://localhost:4566` (LocalStack) | R2 account endpoint |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | LocalStack dummy creds | R2 API token |
 | `S3_BUCKET_RAW` / `S3_BUCKET_MEDIA` | `akosi-raw` / `akosi-media` | same names, created in R2 |
-| `SMTP_HOST` / `SMTP_PORT` | Mailpit (`localhost:1025`) | Resend's SMTP relay |
+| `SMTP_HOST` / `SMTP_PORT` | Mailpit (`localhost:1025`) | Resend's SMTP relay (`smtp.resend.com`, port 587) |
 | `SMTP_FROM` | `admin@akosi.local` | a real address on the verified sending domain |
-| `JWT_SECRET` / `TOTP_ENCRYPTION_KEY` | example placeholders | freshly generated, stored only in Secret Manager |
+| `JWT_SECRET` / `TOTP_ENCRYPTION_KEY` | example placeholders | freshly generated, stored only in Render's env var store |
 | `ENABLE_DEV_UPLOAD_ROUTES` | `true` | **must be unset or `false`** — this flag hard-disables the unauthenticated storage demo routes outside `NODE_ENV=development`, but don't rely on that alone; the var itself should not be set to `true` anywhere this deploy can read it |
-| `NEXT_PUBLIC_API_URL` (web) | `http://localhost:4000` | the deployed Cloud Run API URL |
+| `WEB_ORIGIN` (api) | `http://localhost:3000,http://localhost:3001` | the deployed Vercel production URL (and any preview URLs that need API access) |
+| `NEXT_PUBLIC_API_URL` (web) | `http://localhost:4000` | the deployed Render API URL |
 
 ## Implementation status
 
+- ✅ `apps/web/vercel.json` — Vercel build config for the monorepo
 - ⬜ Dockerfile for `apps/api` (multi-stage: install → `tsc` build →
-  slim runtime image running `node dist/index.js`)
-- ⬜ Dockerfile for `apps/web` (multi-stage Next.js build, matching
-  Next's standard production Docker pattern)
-- ⬜ GitHub Actions workflow — build both images, push to Artifact
-  Registry, deploy to Cloud Run on push to `main`
-- ⬜ Prisma migration run against the Neon database (`prisma migrate
-  deploy`, not `dev` — no interactive prompts in CI)
-- ⬜ Admin bootstrap run once against the deployed database
+  slim runtime image running `node dist/index.js`) — Render can build
+  from a Dockerfile or its own Node buildpack; a Dockerfile gives more
+  control over the production image
+- ⬜ Render service created, Root Directory `apps/api`, Pre-Deploy
+  Command set to `prisma migrate deploy`
+- ⬜ Vercel project imported, Root Directory `apps/web`,
+  `NEXT_PUBLIC_API_URL` set (needs the Render API URL first)
+- ⬜ Real R2 buckets provisioned (`akosi-raw`, `akosi-media`),
+  replacing LocalStack
+- ⬜ `WEB_ORIGIN` on the API updated once the Vercel URL exists
+- ⬜ Admin bootstrap run once against the production database
   (`ADMIN_BOOTSTRAP_USERNAME`/`ADMIN_BOOTSTRAP_PASSWORD`, see
   `12-admin-authentication.md`) — one-time, not part of every deploy
-- ⬜ The four accounts above created, credentials in Secret Manager
+- ⬜ The five accounts above created
 - ⬜ First deploy verified end-to-end (admin login flow, an upload, a
   playback URL actually resolving through R2)
+- ⬜ Load-test the worst-case scenario above (1,000 synthetic taps in
+  under a minute), to confirm the math rather than assume it
 
 Nothing here is blocked on hardware or the Nov '26–Jun '27 roadmap in
 `07-timeline.md` — this is pure infra work that can happen in parallel
