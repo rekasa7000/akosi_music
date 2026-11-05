@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { StageLight } from "@/components/admin/stage-light";
 import { StatTile } from "@/components/admin/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { NewArtistDialog } from "@/components/admin/catalog/new-artist-dialog";
 import { NewReleaseDialog } from "@/components/admin/catalog/new-release-dialog";
 import { cn } from "@/lib/utils";
+import { FOIL_SWEEPS } from "@/lib/foil-sweeps";
 
 function CardsStatusBar({ byStatus }: { byStatus: api.Stats["cardsByStatus"] }) {
   const total = byStatus.UNCLAIMED + byStatus.CLAIMED + byStatus.REVOKED;
@@ -28,7 +30,7 @@ function CardsStatusBar({ byStatus }: { byStatus: api.Stats["cardsByStatus"] }) 
   ] as const;
 
   return (
-    <div className="rounded-xl border-2 border-akosi-fg/10 bg-akosi-surface p-5">
+    <div className="rounded-2xl border-2 border-akosi-fg/15 bg-akosi-surface p-5">
       <p className="font-display text-base font-medium">Cards by status</p>
       {total === 0 ? (
         <p className="mt-3 text-sm text-akosi-muted-fg">No cards provisioned yet.</p>
@@ -82,21 +84,36 @@ export default function AdminDashboardPage() {
   return (
     <AdminShell>
       <div className="px-8 py-10">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b-2 border-akosi-fg/10 pb-8">
-          <div>
-            <h1 className="font-display text-3xl font-bold">Dashboard</h1>
-            <p className="mt-1 text-sm text-akosi-muted-fg">An overview of your catalog.</p>
-          </div>
-          <div className="flex gap-2">
-            {artists ? (
-              <NewArtistDialog
-                onCreated={(a) => {
-                  setArtists([{ ...a, releaseCount: 0, trackCount: 0 }, ...artists]);
-                  refreshStats();
-                }}
-              />
-            ) : null}
-            {artists ? <NewReleaseDialog artists={artists} onCreated={goToNewRelease} /> : null}
+        {/* The one ambient moment on this page — same drifting stage-light
+            glow as the admin login, confined to this banner rather than
+            the full scrolling page. */}
+        <div className="relative mb-8 overflow-hidden rounded-3xl border-2 border-akosi-fg/15">
+          <StageLight />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-6 -bottom-14 font-display text-[9rem] leading-none font-bold text-akosi-fg/5 select-none"
+          >
+            ♪
+          </span>
+          <div className="relative flex flex-wrap items-center justify-between gap-4 px-8 py-10">
+            <div>
+              <p className="font-display text-xs font-semibold tracking-[0.2em] text-akosi-accent-2 uppercase">
+                akosi admin
+              </p>
+              <h1 className="mt-1 font-display text-4xl font-bold lowercase leading-[0.95]">Dashboard</h1>
+              <p className="mt-2 text-sm text-akosi-muted-fg">An overview of your catalog.</p>
+            </div>
+            <div className="flex gap-2">
+              {artists ? (
+                <NewArtistDialog
+                  onCreated={(a) => {
+                    setArtists([{ ...a, releaseCount: 0, trackCount: 0 }, ...artists]);
+                    refreshStats();
+                  }}
+                />
+              ) : null}
+              {artists ? <NewReleaseDialog artists={artists} onCreated={goToNewRelease} /> : null}
+            </div>
           </div>
         </div>
 
@@ -104,10 +121,10 @@ export default function AdminDashboardPage() {
           <p className="text-sm text-akosi-muted-fg">Loading…</p>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <StatTile icon={UsersIcon} label="Artists" value={stats.artistCount} accent="accent" />
+            <StatTile icon={UsersIcon} label="Artists" value={stats.artistCount} accent="accent" tilt={-1} />
             <StatTile icon={DiscIcon} label="Releases" value={stats.releaseCount} accent="accent-2" />
             <StatTile icon={Music2Icon} label="Tracks" value={stats.trackCount} accent="accent" />
-            <StatTile icon={PlayIcon} label="Total plays" value={stats.totalPlays} accent="accent-2" />
+            <StatTile icon={PlayIcon} label="Total plays" value={stats.totalPlays} accent="accent-2" tilt={1} />
           </div>
         )}
 
@@ -122,18 +139,24 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-akosi-muted-fg">No releases yet.</p>
             ) : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                {releases.slice(0, 8).map((release) => (
+                {releases.slice(0, 8).map((release, idx) => (
                   <Link
                     key={release.id}
                     href={`/admin/releases/${release.id}`}
-                    className="group rounded-xl border-2 border-akosi-fg/10 bg-akosi-surface p-3 transition-colors hover:border-akosi-accent-2/40"
+                    className={cn(
+                      "group rounded-2xl border-2 border-akosi-fg/15 bg-akosi-surface p-3 transition-all duration-300 hover:-translate-y-1 hover:rotate-0 hover:border-akosi-accent-2/40 hover:shadow-[0_20px_40px_-24px] hover:shadow-akosi-accent/40",
+                      idx % 2 === 0 ? "-rotate-1" : "rotate-1",
+                    )}
                   >
-                    <div className="relative mb-3 aspect-square overflow-hidden rounded-lg bg-linear-to-br from-akosi-accent/20 to-akosi-accent-2/20">
+                    <div
+                      className="relative mb-3 aspect-square overflow-hidden rounded-xl"
+                      style={!release.coverUrl ? { background: FOIL_SWEEPS[idx % FOIL_SWEEPS.length] } : undefined}
+                    >
                       {release.coverUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={release.coverUrl} alt="" className="size-full object-cover" />
                       ) : (
-                        <div className="flex size-full items-center justify-center text-akosi-muted-fg/60">
+                        <div className="flex size-full items-center justify-center text-white/80">
                           <MusicIcon className="size-8" strokeWidth={1.5} />
                         </div>
                       )}
@@ -154,7 +177,7 @@ export default function AdminDashboardPage() {
           <aside className="space-y-6">
             <CardsStatusBar byStatus={stats?.cardsByStatus ?? { UNCLAIMED: 0, CLAIMED: 0, REVOKED: 0 }} />
 
-            <div className="rounded-xl border-2 border-akosi-fg/10 bg-akosi-surface p-5">
+            <div className="rounded-2xl border-2 border-akosi-fg/15 bg-akosi-surface p-5">
               <div className="mb-3 flex items-center justify-between">
                 <p className="font-display text-base font-medium">Artists</p>
                 <Link
@@ -195,7 +218,7 @@ export default function AdminDashboardPage() {
               )}
             </div>
 
-            <div className="rounded-xl border-2 border-dashed border-akosi-accent-2/40 bg-akosi-accent-2/5 p-5">
+            <div className="rounded-2xl border-2 border-dashed border-akosi-accent-2/40 bg-akosi-accent-2/5 p-5">
               <div className="mb-2 flex items-center gap-2 text-akosi-accent-2">
                 <CreditCardIcon className="size-4" />
                 <p className="font-display text-sm font-medium">Manage cards</p>
