@@ -44,7 +44,7 @@ export default function HomePage() {
   return (
     <div className="min-h-dvh overflow-x-hidden bg-akosi-bg font-sans text-akosi-fg">
       <header className="flex items-center justify-between border-b-2 border-akosi-fg/15 px-6 py-5 lg:px-10">
-        <AkosiWordmark />
+        <AkosiWordmark priority />
         <div className="flex items-center gap-5">
           <Link
             href="/artists"

@@ -10,7 +10,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
       <StageLight />
       <ThemeToggle className="absolute top-4 right-4" />
       <div className="relative flex w-full max-w-sm flex-col items-center gap-10">
-        <AkosiWordmark size="lg" />
+        <AkosiWordmark size="lg" priority />
         <div className="w-full rounded-md border border-akosi-fg/10 bg-akosi-surface/80 p-8 shadow-[0_0_60px_-15px] shadow-akosi-accent/30 backdrop-blur-sm">
           {children}
         </div>
