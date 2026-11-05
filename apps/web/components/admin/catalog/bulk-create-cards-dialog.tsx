@@ -119,9 +119,8 @@ export function BulkCreateCardsDialog({
     >
       <DialogTrigger asChild>
         <Button
-          variant="outline"
           disabled={tracks.length === 0}
-          className="border-akosi-fg/15 bg-transparent! text-akosi-fg! hover:bg-akosi-fg/10!"
+          className="bg-akosi-accent! text-white! hover:bg-akosi-accent-2! disabled:opacity-60"
         >
           <LayersIcon className="size-4" />
           Bulk add

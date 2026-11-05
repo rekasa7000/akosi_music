@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { StageLight } from "@/components/admin/stage-light";
 import { StatTile } from "@/components/admin/stat-tile";
 import { NewCardDialog } from "@/components/admin/catalog/new-card-dialog";
 import { BulkCreateCardsDialog } from "@/components/admin/catalog/bulk-create-cards-dialog";
@@ -25,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FOIL_SWEEPS } from "@/lib/foil-sweeps";
 import { cn } from "@/lib/utils";
 
 const GROUP_BY_LABELS: Record<api.CardGroupBy, string> = {
@@ -46,18 +48,20 @@ type GroupState = {
 
 function CardRow({
   card,
+  idx,
   busy,
   onToggleRevoke,
 }: {
   card: api.Card;
+  idx: number;
   busy: boolean;
   onToggleRevoke: (card: api.Card) => void;
 }) {
   return (
     <div
       className={cn(
-        "relative flex items-center gap-4 overflow-hidden rounded-xl border-2 bg-akosi-surface py-4 pr-5 pl-6",
-        card.status === "REVOKED" ? "border-akosi-fg/10" : "border-akosi-accent-2/30",
+        "relative flex items-center gap-4 overflow-hidden rounded-2xl border-2 bg-akosi-surface py-4 pr-5 pl-6",
+        card.status === "REVOKED" ? "border-akosi-fg/15" : "border-akosi-accent-2/30",
       )}
     >
       <div
@@ -66,7 +70,13 @@ function CardRow({
           card.status === "REVOKED" ? "bg-akosi-fg/20" : "bg-akosi-accent-2",
         )}
       />
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-akosi-accent/10 text-akosi-accent-2">
+      <div
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-lg",
+          card.status === "REVOKED" ? "bg-akosi-fg/10 text-akosi-muted-fg" : "text-white",
+        )}
+        style={card.status === "REVOKED" ? undefined : { background: FOIL_SWEEPS[idx % FOIL_SWEEPS.length] }}
+      >
         <CreditCardIcon className="size-5" />
       </div>
       <div className="min-w-0 flex-1">
@@ -261,16 +271,30 @@ export default function CardsPage() {
   return (
     <AdminShell>
       <div className="px-8 py-10">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b-2 border-akosi-fg/10 pb-8">
-          <div>
-            <h1 className="font-display text-3xl font-bold">Cards</h1>
-            <p className="mt-1 text-sm text-akosi-muted-fg">
-              Manually provisioned cards and the tracks they unlock.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {tracks ? <BulkCreateCardsDialog tracks={tracks} onCreated={refreshAfterCreate} /> : null}
-            {tracks ? <NewCardDialog tracks={tracks} onCreated={refreshAfterCreate} /> : null}
+        {/* The one ambient moment on this page — same confined stage-light
+            glow as the dashboard and artist roster heroes. */}
+        <div className="relative mb-8 overflow-hidden rounded-3xl border-2 border-akosi-fg/15">
+          <StageLight />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-6 -bottom-14 font-display text-[9rem] leading-none font-bold text-akosi-fg/5 select-none"
+          >
+            #
+          </span>
+          <div className="relative flex flex-wrap items-center justify-between gap-4 px-8 py-10">
+            <div>
+              <p className="font-display text-xs font-semibold tracking-[0.2em] text-akosi-accent-2 uppercase">
+                akosi admin
+              </p>
+              <h1 className="mt-1 font-display text-4xl font-bold lowercase leading-[0.95]">Cards</h1>
+              <p className="mt-2 text-sm text-akosi-muted-fg">
+                Manually provisioned cards and the tracks they unlock.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {tracks ? <BulkCreateCardsDialog tracks={tracks} onCreated={refreshAfterCreate} /> : null}
+              {tracks ? <NewCardDialog tracks={tracks} onCreated={refreshAfterCreate} /> : null}
+            </div>
           </div>
         </div>
 
@@ -341,7 +365,7 @@ export default function CardsPage() {
                     const state = expanded.get(group.key);
                     const isOpen = state !== undefined;
                     return (
-                      <div key={group.key} className="overflow-hidden rounded-xl border-2 border-akosi-fg/10">
+                      <div key={group.key} className="overflow-hidden rounded-2xl border-2 border-akosi-fg/15">
                         <button
                           type="button"
                           onClick={() => toggleGroup(group.key)}
@@ -369,10 +393,11 @@ export default function CardsPage() {
                             ) : (
                               <>
                                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                                  {state.cards.map((card) => (
+                                  {state.cards.map((card, idx) => (
                                     <CardRow
                                       key={card.id}
                                       card={card}
+                                      idx={idx}
                                       busy={busyId === card.id}
                                       onToggleRevoke={toggleRevoke}
                                     />
