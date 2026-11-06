@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import * as api from "@/lib/admin-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,16 +15,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export function EditTrackDialog({
+type EditableTrack = {
+  id: string;
+  title: string;
+  trackNumber: number | null;
+  lyrics: string | null;
+  coverImageKey: string | null;
+};
+
+type UpdateTrackParams = {
+  title?: string;
+  trackNumber?: number;
+  lyrics?: string;
+  coverImageKey?: string;
+};
+
+// Injected rather than imported — same reuse story as AddTrackForm/
+// CoverUploader. T must carry at least EditableTrack's fields; admin's
+// api.TrackSummary (cardCount/locked extras) and a future artist Track
+// type both satisfy that structurally.
+export function EditTrackDialog<T extends EditableTrack>({
   track,
   open,
   onOpenChange,
   onUpdated,
+  uploadMedia,
+  updateTrack,
 }: {
-  track: api.TrackSummary;
+  track: T;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpdated: (track: api.TrackSummary) => void;
+  onUpdated: (track: T) => void;
+  uploadMedia: (purpose: "track-cover", file: File) => Promise<string>;
+  updateTrack: (id: string, params: UpdateTrackParams) => Promise<Partial<T> & { coverImageKey: string | null }>;
 }) {
   const [title, setTitle] = useState(track.title);
   const [trackNumber, setTrackNumber] = useState(track.trackNumber?.toString() ?? "");
@@ -39,7 +61,7 @@ export function EditTrackDialog({
     setError(null);
     setBusy(true);
     try {
-      const updated = await api.updateTrack(track.id, {
+      const updated = await updateTrack(track.id, {
         title,
         trackNumber: trackNumber ? Number(trackNumber) : undefined,
         lyrics,
@@ -47,14 +69,14 @@ export function EditTrackDialog({
       onUpdated({ ...track, ...updated, coverImageKey });
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof api.AdminApiError ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
   }
 
   async function handleCoverUploaded(key: string) {
-    const updated = await api.updateTrack(track.id, { coverImageKey: key });
+    const updated = await updateTrack(track.id, { coverImageKey: key });
     setCoverImageKey(updated.coverImageKey);
     onUpdated({ ...track, ...updated });
   }
@@ -85,6 +107,7 @@ export function EditTrackDialog({
                 purpose="track-cover"
                 currentKey={coverImageKey}
                 size="sm"
+                uploadMedia={uploadMedia}
                 onUploaded={handleCoverUploaded}
               />
             </div>

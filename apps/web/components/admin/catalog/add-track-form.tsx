@@ -9,7 +9,6 @@ import {
   VideoIcon,
   XIcon,
 } from "lucide-react";
-import * as api from "@/lib/admin-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,16 +22,35 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function AddTrackForm({
+type MediaType = "AUDIO" | "VIDEO";
+
+type CreateTrackParams = {
+  title: string;
+  mediaType: MediaType;
+  rawStorageKey: string;
+  trackNumber?: number;
+  lyrics?: string;
+  coverImageKey?: string;
+};
+
+// Injected rather than imported — lets this component serve both the
+// admin portal (admin-api.ts) and the artist portal (artist-api.ts). T is
+// whatever shape each client's createTrack resolves to; the caller already
+// knows how to fold that into its own local state.
+export function AddTrackForm<T>({
   releaseId,
   nextTrackNumber,
+  uploadMedia,
+  createTrack,
   onCreated,
 }: {
   releaseId: string;
   nextTrackNumber: number;
-  onCreated: (track: api.Track) => void;
+  uploadMedia: (purpose: "track-audio" | "track-video" | "track-cover", file: File) => Promise<string>;
+  createTrack: (releaseId: string, params: CreateTrackParams) => Promise<T>;
+  onCreated: (track: T) => void;
 }) {
-  const [mediaType, setMediaType] = useState<api.MediaType>("AUDIO");
+  const [mediaType, setMediaType] = useState<MediaType>("AUDIO");
   const [file, setFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
@@ -78,7 +96,7 @@ export function AddTrackForm({
     setBusy(true);
     try {
       setStage(mediaType === "AUDIO" ? "Uploading audio…" : "Uploading video…");
-      const rawStorageKey = await api.uploadMedia(
+      const rawStorageKey = await uploadMedia(
         mediaType === "AUDIO" ? "track-audio" : "track-video",
         file,
       );
@@ -86,11 +104,11 @@ export function AddTrackForm({
       let coverImageKey: string | undefined;
       if (coverFile) {
         setStage("Uploading cover…");
-        coverImageKey = await api.uploadMedia("track-cover", coverFile);
+        coverImageKey = await uploadMedia("track-cover", coverFile);
       }
 
       setStage("Saving track…");
-      const track = await api.createTrack(releaseId, {
+      const track = await createTrack(releaseId, {
         title,
         mediaType,
         rawStorageKey,
@@ -105,7 +123,7 @@ export function AddTrackForm({
       setCoverFile(null);
       setCoverPreviewUrl(null);
     } catch (err) {
-      setError(err instanceof api.AdminApiError ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setBusy(false);
       setStage(null);

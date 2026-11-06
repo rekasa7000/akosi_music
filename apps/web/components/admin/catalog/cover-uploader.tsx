@@ -2,23 +2,31 @@
 
 import { useRef, useState, type DragEvent } from "react";
 import { CameraIcon, ImagePlusIcon, Loader2Icon } from "lucide-react";
-import * as api from "@/lib/admin-api";
 import { formatMb, MAX_IMAGE_UPLOAD_MB } from "@/lib/upload-limits";
 import { cn } from "@/lib/utils";
 
 const SIZE_CLASSES = { lg: "max-w-64", sm: "max-w-36", xs: "max-w-28" } as const;
 const ASPECT_CLASSES = { square: "aspect-square", banner: "aspect-[3/1]" } as const;
 
-export function CoverUploader({
+// Purpose-agnostic: admin and artist clients each define their own
+// MediaUploadPurpose union (artist's is narrower — no artist-profile/
+// artist-cover). Generic over P rather than a fixed union so each call
+// site's own purpose literal — and the narrower uploadMedia function
+// that actually accepts it — type-checks without widening either
+// client's purpose type to match the other.
+export type CoverUploadPurpose = "release-cover" | "track-cover" | "artist-profile" | "artist-cover";
+
+export function CoverUploader<P extends string>({
   purpose,
   currentKey = null,
   currentUrl = null,
   onUploaded,
+  uploadMedia,
   size = "lg",
   aspect = "square",
   shape = "rounded",
 }: {
-  purpose: api.MediaUploadPurpose;
+  purpose: P;
   // Raw storage key — release/track covers only have this (no
   // resolved URL from those endpoints yet), so it's just a "there's
   // something uploaded" signal behind a generic placeholder.
@@ -27,6 +35,10 @@ export function CoverUploader({
   // the real existing image instead of the placeholder.
   currentUrl?: string | null;
   onUploaded: (key: string) => Promise<void>;
+  // Injected rather than imported — lets this component serve both the
+  // admin portal (admin-api.ts) and the artist portal (artist-api.ts)
+  // without either one knowing about the other's session/cookie.
+  uploadMedia: (purpose: P, file: File) => Promise<string>;
   size?: "lg" | "sm" | "xs";
   aspect?: "square" | "banner";
   shape?: "rounded" | "circle";
@@ -52,10 +64,10 @@ export function CoverUploader({
     setError(null);
     setBusy(true);
     try {
-      const key = await api.uploadMedia(purpose, file);
+      const key = await uploadMedia(purpose, file);
       await onUploaded(key);
     } catch (err) {
-      setError(err instanceof api.AdminApiError ? err.message : "Upload failed.");
+      setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setBusy(false);
     }

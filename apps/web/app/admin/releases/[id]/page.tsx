@@ -94,6 +94,7 @@ export default function ReleaseDetailPage() {
           <div className="grid grid-cols-1 gap-10 border-b-2 border-akosi-fg/10 pb-10 lg:grid-cols-[18rem_1fr]">
             <CoverUploader
               purpose="release-cover"
+              uploadMedia={api.uploadMedia}
               currentKey={release.coverImageKey}
               onUploaded={async (coverImageKey) => {
                 const updated = await api.updateRelease(release.id, { coverImageKey });
@@ -215,6 +216,8 @@ export default function ReleaseDetailPage() {
             <AddTrackForm
               releaseId={release.id}
               nextTrackNumber={release.tracks.length + 1}
+              uploadMedia={api.uploadMedia}
+              createTrack={api.createTrack}
               onCreated={(track) =>
                 setRelease({
                   ...release,
@@ -248,6 +251,8 @@ export default function ReleaseDetailPage() {
           onOpenChange={(next) => {
             if (!next) setEditingTrackId(null);
           }}
+          uploadMedia={api.uploadMedia}
+          updateTrack={api.updateTrack}
           onUpdated={(updated) =>
             setRelease({
               ...release,

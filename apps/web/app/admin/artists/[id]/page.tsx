@@ -130,6 +130,7 @@ export default function ArtistDetailPage() {
           <CoverUploader
             purpose="artist-cover"
             aspect="banner"
+            uploadMedia={api.uploadMedia}
             currentUrl={artist.coverImageUrl}
             onUploaded={async (coverImageKey) => {
               const updated = await api.updateArtist(artist.id, { coverImageKey });
@@ -142,6 +143,7 @@ export default function ArtistDetailPage() {
               purpose="artist-profile"
               shape="circle"
               size="xs"
+              uploadMedia={api.uploadMedia}
               currentUrl={artist.profileImageUrl}
               onUploaded={async (profileImageKey) => {
                 const updated = await api.updateArtist(artist.id, { profileImageKey });
