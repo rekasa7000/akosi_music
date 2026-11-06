@@ -59,14 +59,31 @@ export async function requireArtistSession(
     // Same revocation trick as the admin session: a password reset (by the
     // artist themselves, or by an admin via the portal-reset action) should
     // invalidate any session issued before it, not just future logins.
+    //
+    // Revocation epoch is the later of passwordSetAt and artist.invitedAt,
+    // not passwordSetAt alone. admin-artists.ts's invite/resend/reset
+    // action sets passwordSetAt back to null (to force PASSWORD_SETUP
+    // again) while re-stamping invitedAt to now — with only passwordSetAt
+    // checked here, a null value skipped the comparison entirely, so an
+    // admin-initiated "reset portal password" (e.g. on a suspected
+    // compromise) left any session issued before the reset valid until its
+    // natural 12h expiry instead of being revoked immediately. invitedAt is
+    // always set once an artist account exists, so it's a safe fallback
+    // anchor rather than another nullable field that can fail open the
+    // same way.
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { passwordSetAt: true },
+      select: { passwordSetAt: true, artist: { select: { invitedAt: true } } },
     });
-    const passwordSetAtSeconds = user?.passwordSetAt
+    if (!user) {
+      return reply.code(401).send({ error: "Session expired or invalid." });
+    }
+    const passwordSetAtSeconds = user.passwordSetAt
       ? Math.floor(user.passwordSetAt.getTime() / 1000)
       : null;
-    if (passwordSetAtSeconds !== null && payload.iat < passwordSetAtSeconds) {
+    const invitedAtSeconds = user.artist ? Math.floor(user.artist.invitedAt.getTime() / 1000) : null;
+    const revokeBeforeSeconds = Math.max(passwordSetAtSeconds ?? 0, invitedAtSeconds ?? 0);
+    if (revokeBeforeSeconds > 0 && payload.iat < revokeBeforeSeconds) {
       return reply.code(401).send({ error: "Session expired or invalid." });
     }
 
