@@ -2,12 +2,14 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AuthShell, AuthHeading, SetupProgress } from "./auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type Stage =
   | { kind: "loading" }
@@ -43,6 +45,32 @@ function FieldError({ message }: { message: string | null }) {
     <p role="alert" className="text-sm text-akosi-accent-2">
       {message}
     </p>
+  );
+}
+
+function CopyKeyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={copy}
+          aria-label="Copy setup key"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-akosi-muted-fg transition-colors hover:bg-akosi-fg/10 hover:text-akosi-fg"
+        >
+          {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{copied ? "Copied" : "Copy setup key"}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -148,7 +176,10 @@ export function AdminLoginFlow() {
   if (stage.kind === "login") {
     return (
       <AuthShell>
-        <AuthHeading title="Sign in" description="Admin access only." />
+        <AuthHeading
+          title="Sign in"
+          description="Admin access only. You'll stay signed in for 12 hours."
+        />
         <form
           className="space-y-4"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
@@ -188,7 +219,7 @@ export function AdminLoginFlow() {
         <SetupProgress index={setupStepIndex(stage.kind)} />
         <AuthHeading
           title="Add your email"
-          description="We'll send a code to confirm it."
+          description="This replaces the shared setup login — once confirmed, it's the only email that can sign in to this account."
         />
         <form
           className="space-y-4"
@@ -226,8 +257,8 @@ export function AdminLoginFlow() {
           title="Check your email"
           description={
             stage.email
-              ? `Enter the 6-digit code we sent to ${stage.email}.`
-              : "Enter the 6-digit code we sent you."
+              ? `Enter the 6-digit code we sent to ${stage.email}. It's valid for 30 minutes.`
+              : "Enter the 6-digit code we sent you. It's valid for 30 minutes."
           }
         />
         <form
@@ -260,7 +291,7 @@ export function AdminLoginFlow() {
         <SetupProgress index={setupStepIndex(stage.kind)} />
         <AuthHeading
           title="Set a password"
-          description="Replace the shared setup password with one only you know."
+          description="Replace the shared setup password with one only you know — it takes effect immediately."
         />
         <form
           className="space-y-4"
@@ -315,7 +346,7 @@ export function AdminLoginFlow() {
         <SetupProgress index={setupStepIndex(stage.kind)} />
         <AuthHeading
           title="Set up an authenticator"
-          description="Scan this with Google Authenticator or a similar app."
+          description="Scan this with Google Authenticator or a similar app — it becomes your second factor for every sign-in from now on."
         />
         <div className="mb-5 flex justify-center">
           <img
@@ -324,9 +355,12 @@ export function AdminLoginFlow() {
             className="size-40 rounded-sm border border-black/10 bg-white p-2"
           />
         </div>
-        <p className="mb-5 text-center text-xs text-akosi-muted-fg">
-          Can&apos;t scan? Enter this key manually:{" "}
-          <code className="break-all text-akosi-fg">{stage.key}</code>
+        <p className="mb-5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-center text-xs text-akosi-muted-fg">
+          <span>Can&apos;t scan? Enter this key manually:</span>
+          <span className="inline-flex items-center gap-1">
+            <code className="break-all text-akosi-fg">{stage.key}</code>
+            <CopyKeyButton value={stage.key} />
+          </span>
         </p>
         <form
           className="space-y-4"
@@ -350,11 +384,14 @@ export function AdminLoginFlow() {
   if (stage.kind === "select-method") {
     return (
       <AuthShell>
-        <AuthHeading title="Verify it's you" description="Choose how to get a code." />
+        <AuthHeading
+          title="Verify it's you"
+          description="Your password checked out — pick a second factor to finish signing in."
+        />
         <div className="space-y-3">
           {stage.methods.includes("TOTP") && (
             <Button
-              className="w-full justify-center border-akosi-fg/15 bg-transparent! text-akosi-fg! hover:bg-akosi-fg/10!"
+              className="w-full flex-col items-start gap-0.5 border-akosi-fg/15 bg-transparent! px-4 py-3 text-akosi-fg! hover:bg-akosi-fg/10!"
               variant="outline"
               disabled={busy}
               onClick={() =>
@@ -365,12 +402,15 @@ export function AdminLoginFlow() {
                 })
               }
             >
-              Authenticator app
+              <span>Authenticator app</span>
+              <span className="text-xs font-normal text-akosi-muted-fg">
+                Enter the current code from your authenticator app
+              </span>
             </Button>
           )}
           {stage.methods.includes("EMAIL") && (
             <Button
-              className="w-full justify-center border-akosi-fg/15 bg-transparent! text-akosi-fg! hover:bg-akosi-fg/10!"
+              className="w-full flex-col items-start gap-0.5 border-akosi-fg/15 bg-transparent! px-4 py-3 text-akosi-fg! hover:bg-akosi-fg/10!"
               variant="outline"
               disabled={busy}
               onClick={() =>
@@ -381,7 +421,10 @@ export function AdminLoginFlow() {
                 })
               }
             >
-              Email
+              <span>Email</span>
+              <span className="text-xs font-normal text-akosi-muted-fg">
+                We&apos;ll send a one-time code to your inbox
+              </span>
             </Button>
           )}
         </div>
@@ -397,8 +440,8 @@ export function AdminLoginFlow() {
         title="Enter the code"
         description={
           stage.method === "TOTP"
-            ? "From your authenticator app."
-            : "We emailed you a 6-digit code."
+            ? "The current 6-digit code from your authenticator app."
+            : "We emailed a 6-digit code — it's valid for 10 minutes."
         }
       />
       <form
