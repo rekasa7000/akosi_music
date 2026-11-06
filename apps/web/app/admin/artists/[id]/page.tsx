@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import {
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,6 +65,90 @@ function LinkField({
         onBlur={() => onSave(ref.current?.value.trim() ?? "")}
         className="text-sm"
       />
+    </div>
+  );
+}
+
+const ACCOUNT_STATUS_LABEL: Record<api.ArtistAccountStatus, string> = {
+  NONE: "Not invited",
+  PENDING: "Invite pending",
+  ACTIVE: "Active",
+};
+
+// One backend action (POST /admin/artists/:id/invite) covers invite,
+// resend, and portal-password-reset — this panel just picks the label
+// based on the artist's current accountStatus.
+function PortalAccessPanel({
+  artist,
+  onInvited,
+}: {
+  artist: api.ArtistDetail;
+  onInvited: (patch: { accountStatus: api.ArtistAccountStatus; accountEmail: string }) => void;
+}) {
+  const [email, setEmail] = useState(artist.accountEmail ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  const actionLabel =
+    artist.accountStatus === "NONE"
+      ? "Send invite"
+      : artist.accountStatus === "PENDING"
+        ? "Resend invite"
+        : "Reset portal password";
+
+  async function handleInvite(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed) return;
+    setError(null);
+    setSent(false);
+    setBusy(true);
+    try {
+      await api.inviteArtist(artist.id, trimmed);
+      onInvited({
+        accountStatus: artist.accountStatus === "NONE" ? "PENDING" : artist.accountStatus,
+        accountEmail: trimmed,
+      });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof api.AdminApiError ? err.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-akosi-fg/10 bg-akosi-surface p-5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium tracking-wide text-akosi-muted-fg uppercase">Portal access</p>
+        <Badge variant="outline" className="border-akosi-fg/15 text-akosi-muted-fg">
+          {ACCOUNT_STATUS_LABEL[artist.accountStatus]}
+        </Badge>
+      </div>
+      <form onSubmit={handleInvite} className="space-y-2">
+        <Label htmlFor="artist-portal-email" className="sr-only">
+          Artist email
+        </Label>
+        <Input
+          id="artist-portal-email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="artist@email.com"
+          className="text-sm"
+        />
+        {error ? <p className="text-xs text-akosi-accent-2">{error}</p> : null}
+        {sent && !error ? <p className="text-xs text-akosi-muted-fg">Invite sent.</p> : null}
+        <Button
+          type="submit"
+          disabled={busy}
+          className="w-full bg-akosi-accent! text-white! hover:bg-akosi-accent-2! disabled:opacity-60"
+        >
+          {busy ? "Sending…" : actionLabel}
+        </Button>
+      </form>
     </div>
   );
 }
@@ -178,38 +263,44 @@ export default function ArtistDetailPage() {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-xl border border-akosi-fg/10 bg-akosi-surface p-5">
-              <p className="text-sm font-medium tracking-wide text-akosi-muted-fg uppercase">Links</p>
-              <LinkField
-                id="artist-website"
-                label="Website"
-                defaultValue={artist.websiteUrl}
-                onSave={(websiteUrl) => patchArtist({ websiteUrl: websiteUrl || null })}
+            <div className="space-y-4">
+              <PortalAccessPanel
+                artist={artist}
+                onInvited={(patch) => setArtist({ ...artist, ...patch })}
               />
-              <LinkField
-                id="artist-instagram"
-                label="Instagram"
-                defaultValue={artist.instagramUrl}
-                onSave={(instagramUrl) => patchArtist({ instagramUrl: instagramUrl || null })}
-              />
-              <LinkField
-                id="artist-twitter"
-                label="Twitter / X"
-                defaultValue={artist.twitterUrl}
-                onSave={(twitterUrl) => patchArtist({ twitterUrl: twitterUrl || null })}
-              />
-              <LinkField
-                id="artist-facebook"
-                label="Facebook"
-                defaultValue={artist.facebookUrl}
-                onSave={(facebookUrl) => patchArtist({ facebookUrl: facebookUrl || null })}
-              />
-              <LinkField
-                id="artist-spotify"
-                label="Spotify"
-                defaultValue={artist.spotifyUrl}
-                onSave={(spotifyUrl) => patchArtist({ spotifyUrl: spotifyUrl || null })}
-              />
+              <div className="space-y-4 rounded-xl border border-akosi-fg/10 bg-akosi-surface p-5">
+                <p className="text-sm font-medium tracking-wide text-akosi-muted-fg uppercase">Links</p>
+                <LinkField
+                  id="artist-website"
+                  label="Website"
+                  defaultValue={artist.websiteUrl}
+                  onSave={(websiteUrl) => patchArtist({ websiteUrl: websiteUrl || null })}
+                />
+                <LinkField
+                  id="artist-instagram"
+                  label="Instagram"
+                  defaultValue={artist.instagramUrl}
+                  onSave={(instagramUrl) => patchArtist({ instagramUrl: instagramUrl || null })}
+                />
+                <LinkField
+                  id="artist-twitter"
+                  label="Twitter / X"
+                  defaultValue={artist.twitterUrl}
+                  onSave={(twitterUrl) => patchArtist({ twitterUrl: twitterUrl || null })}
+                />
+                <LinkField
+                  id="artist-facebook"
+                  label="Facebook"
+                  defaultValue={artist.facebookUrl}
+                  onSave={(facebookUrl) => patchArtist({ facebookUrl: facebookUrl || null })}
+                />
+                <LinkField
+                  id="artist-spotify"
+                  label="Spotify"
+                  defaultValue={artist.spotifyUrl}
+                  onSave={(spotifyUrl) => patchArtist({ spotifyUrl: spotifyUrl || null })}
+                />
+              </div>
             </div>
           </div>
 

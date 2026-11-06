@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
+import { hash } from "argon2";
 import { Prisma, prisma } from "@akosi/database";
 import { requireAdminSession } from "../auth/session.js";
+import { generateChallengeToken } from "../auth/crypto.js";
+import { sendMail } from "../auth/mailer.js";
 import {
   promoteRawUploadToMedia,
   keyMatchesPurpose,
@@ -91,6 +94,8 @@ const ArtistRelease = Type.Object({
   tracks: Type.Array(ArtistTrack),
 });
 
+const AccountStatus = Type.Union([Type.Literal("NONE"), Type.Literal("PENDING"), Type.Literal("ACTIVE")]);
+
 const ArtistDetail = Type.Intersect([
   Artist,
   Type.Object({
@@ -98,6 +103,10 @@ const ArtistDetail = Type.Intersect([
     releaseCount: Type.Integer(),
     trackCount: Type.Integer(),
     releases: Type.Array(ArtistRelease),
+    // Portal-account state: NONE = never invited, PENDING = invited but
+    // still on the temp password, ACTIVE = artist has set a real password.
+    accountStatus: AccountStatus,
+    accountEmail: Type.Union([Type.String(), Type.Null()]),
   }),
 ]);
 
@@ -175,11 +184,20 @@ export async function adminArtistRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const artist = await prisma.artist.findUnique({
         where: { id: request.params.id },
-        include: { releases: { include: { tracks: true }, orderBy: { createdAt: "desc" } } },
+        include: {
+          releases: { include: { tracks: true }, orderBy: { createdAt: "desc" } },
+          user: true,
+        },
       });
       if (!artist) {
         return reply.code(404).send({ error: "Artist not found." });
       }
+
+      const accountStatus: "NONE" | "PENDING" | "ACTIVE" = !artist.user
+        ? "NONE"
+        : artist.user.passwordSetAt
+          ? "ACTIVE"
+          : "PENDING";
 
       const trackIds = artist.releases.flatMap((r) => r.tracks.map((t) => t.id));
       const [playCounts, activeCardCounts, everCardCounts] = await Promise.all([
@@ -204,6 +222,8 @@ export async function adminArtistRoutes(app: FastifyInstance) {
         totalPlays,
         releaseCount: artist.releases.length,
         trackCount: trackIds.length,
+        accountStatus,
+        accountEmail: artist.user?.email ?? null,
         releases: artist.releases.map((release) => ({
           id: release.id,
           title: release.title,
@@ -281,6 +301,73 @@ export async function adminArtistRoutes(app: FastifyInstance) {
 
       const artist = await prisma.artist.update({ where: { id: existing.id }, data });
       return serializeArtist(artist);
+    },
+  );
+
+  // One action, three meanings depending on current state — the admin UI
+  // just shows a differently-labeled button ("Invite" / "Resend invite" /
+  // "Reset portal password"), all driven by the same accountStatus this
+  // route changes. The generated temp password is never returned here —
+  // it's emailed directly to the artist, same as every other code this
+  // app ever sends (see auth/challenges.ts).
+  typedApp.post(
+    "/admin/artists/:id/invite",
+    {
+      preHandler: requireAdminSession,
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: Type.Object({ email: Type.String({ format: "email" }) }),
+        response: { 200: Type.Object({ ok: Type.Literal(true) }), 404: ErrorResponse, 409: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      const artist = await prisma.artist.findUnique({ where: { id: request.params.id } });
+      if (!artist) {
+        return reply.code(404).send({ error: "Artist not found." });
+      }
+
+      const { email } = request.body;
+      const tempPassword = generateChallengeToken();
+      const passwordHash = await hash(tempPassword);
+
+      try {
+        if (!artist.userId) {
+          const user = await prisma.user.create({
+            data: { email, role: "ARTIST", passwordHash },
+          });
+          await prisma.artist.update({
+            where: { id: artist.id },
+            data: { userId: user.id, invitedAt: new Date() },
+          });
+        } else {
+          // Resend (still pending) or reset (already active) — both
+          // overwrite the password and re-stamp invitedAt, which is what
+          // bounds the temp password's lifetime (see artist-auth.ts).
+          // Forcing passwordSetAt back to null either way means an
+          // "already active" artist goes through PASSWORD_SETUP again
+          // next login, exactly like a fresh invite.
+          await prisma.user.update({
+            where: { id: artist.userId },
+            data: { email, passwordHash, passwordSetAt: null },
+          });
+          await prisma.artist.update({ where: { id: artist.id }, data: { invitedAt: new Date() } });
+        }
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          return reply.code(409).send({ error: "That email is already in use by another account." });
+        }
+        throw err;
+      }
+
+      const webOrigin = (process.env.WEB_ORIGIN ?? "http://localhost:3000").split(",")[0].trim();
+      await sendMail({
+        to: email,
+        subject: "You're invited to the akosi.music artist portal",
+        text: `You've been invited to manage "${artist.name}" on akosi.music.\n\nSign in at ${webOrigin}/artist/login with:\n\nEmail: ${email}\nTemporary password: ${tempPassword}\n\nYou'll be asked to set a real password on first sign-in. This invite expires in 7 days.`,
+      });
+
+      return { ok: true as const };
     },
   );
 }

@@ -323,15 +323,29 @@ export type ArtistReleaseSummary = {
   tracks: ArtistTrack[];
 };
 
+export type ArtistAccountStatus = "NONE" | "PENDING" | "ACTIVE";
+
 export type ArtistDetail = Artist & {
   totalPlays: number;
   releaseCount: number;
   trackCount: number;
   releases: ArtistReleaseSummary[];
+  accountStatus: ArtistAccountStatus;
+  accountEmail: string | null;
 };
 
 export function getArtist(id: string) {
   return request<ArtistDetail>(`/admin/artists/${encodeURIComponent(id)}`);
+}
+
+// Invite (NONE), resend (PENDING), or reset the portal password (ACTIVE) —
+// one endpoint, label chosen by the caller based on accountStatus. See
+// apps/api/src/routes/admin-artists.ts.
+export function inviteArtist(id: string, email: string) {
+  return request<{ ok: true }>(`/admin/artists/${encodeURIComponent(id)}/invite`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export function updateArtist(
