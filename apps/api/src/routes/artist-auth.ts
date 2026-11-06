@@ -11,6 +11,16 @@ import {
 
 const INVITE_TTL_DAYS = 7;
 
+// Shared by /artist/login and /artist/setup/password so the two can't
+// drift apart — a temp password that's too old to start the setup flow
+// at /login must also be too old to complete it directly at
+// /setup/password, which re-verifies currentPassword itself and would
+// otherwise accept the same expired credential.
+function isInviteExpired(invitedAt: Date | undefined): boolean {
+  const expiresAt = new Date((invitedAt ?? new Date(0)).getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+  return expiresAt < new Date();
+}
+
 const LoginResponse = Type.Union([
   Type.Object({ step: Type.Literal("PASSWORD_SETUP") }),
   Type.Object({ step: Type.Literal("DONE") }),
@@ -57,9 +67,7 @@ export async function artistAuthRoutes(app: FastifyInstance) {
         // Still on the temp password the admin's invite generated — the
         // invite has an implicit expiry (unlike admin's email/TOTP codes,
         // this credential has no natural short lifetime otherwise).
-        const invitedAt = user.artist?.invitedAt ?? new Date(0);
-        const expiresAt = new Date(invitedAt.getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
-        if (expiresAt < new Date()) {
+        if (isInviteExpired(user.artist?.invitedAt)) {
           return reply
             .code(401)
             .send({ error: "This invite has expired. Ask the platform team to resend it." });
@@ -93,12 +101,25 @@ export async function artistAuthRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { email, currentPassword, newPassword } = request.body;
-      const user = await prisma.user.findFirst({ where: { email, role: "ARTIST" } });
+      const user = await prisma.user.findFirst({
+        where: { email, role: "ARTIST" },
+        include: { artist: true },
+      });
 
       const passwordOk =
         user?.passwordHash != null && (await verifyPasswordHash(user.passwordHash, currentPassword));
       if (!user || !passwordOk) {
         return reply.code(401).send({ error: "Invalid email or password." });
+      }
+
+      // This endpoint also serves a voluntary change-password from within
+      // the already-logged-in portal (see comment above), where
+      // passwordSetAt is already set and invite expiry doesn't apply —
+      // only gate the still-on-temp-password case, matching /artist/login.
+      if (!user.passwordSetAt && isInviteExpired(user.artist?.invitedAt)) {
+        return reply
+          .code(401)
+          .send({ error: "This invite has expired. Ask the platform team to resend it." });
       }
 
       const passwordHash = await hash(newPassword);
