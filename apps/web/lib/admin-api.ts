@@ -384,6 +384,9 @@ export type Card = {
   artistId: string;
   artistName: string;
   playCount: number;
+  // Null unless status is CLAIMED.
+  ownerEmail: string | null;
+  claimedAt: string | null;
 };
 
 export type CardGroupBy = "artist" | "release" | "track" | "status" | "edition";
@@ -431,6 +434,17 @@ export function updateCard(id: string, params: { status?: CardStatus; editionLab
   return request<Card>(`/admin/cards/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(params),
+  });
+}
+
+// Records that a card has been sold/handed to a customer — no real
+// checkout exists yet, so this is a manual stand-in. Also covers
+// reassigning an already-CLAIMED card to a different email; the
+// backend upserts, so this is the same call either way.
+export function markCardSold(id: string, email: string) {
+  return request<Card>(`/admin/cards/${encodeURIComponent(id)}/mark-sold`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 

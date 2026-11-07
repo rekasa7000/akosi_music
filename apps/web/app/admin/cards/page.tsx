@@ -16,6 +16,7 @@ import { StageLight } from "@/components/admin/stage-light";
 import { StatTile } from "@/components/admin/stat-tile";
 import { NewCardDialog } from "@/components/admin/catalog/new-card-dialog";
 import { BulkCreateCardsDialog } from "@/components/admin/catalog/bulk-create-cards-dialog";
+import { MarkCardSoldDialog } from "@/components/admin/catalog/mark-card-sold-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,11 +52,13 @@ function CardRow({
   idx,
   busy,
   onToggleRevoke,
+  onSoldUpdated,
 }: {
   card: api.Card;
   idx: number;
   busy: boolean;
   onToggleRevoke: (card: api.Card) => void;
+  onSoldUpdated: (card: api.Card) => void;
 }) {
   return (
     <div
@@ -84,6 +87,9 @@ function CardRow({
         <p className="truncate text-sm text-akosi-muted-fg">
           {card.trackTitle} — {card.releaseTitle} ({card.artistName})
         </p>
+        {card.ownerEmail ? (
+          <p className="truncate text-xs text-akosi-muted-fg">Sold to {card.ownerEmail}</p>
+        ) : null}
       </div>
       {card.editionLabel ? (
         <Badge variant="outline" className="shrink-0 border-akosi-fg/15 text-akosi-muted-fg">
@@ -103,6 +109,7 @@ function CardRow({
       >
         {card.status}
       </Badge>
+      {card.status !== "REVOKED" ? <MarkCardSoldDialog card={card} onUpdated={onSoldUpdated} /> : null}
       <Button
         variant="ghost"
         size="sm"
@@ -266,6 +273,23 @@ export default function CardsPage() {
     }
   }
 
+  // MarkCardSoldDialog already made the API call and has its own busy
+  // state — this just folds the result into the page the same way
+  // toggleRevoke does.
+  function handleSoldUpdated(updated: api.Card) {
+    setExpanded((prev) => {
+      const next = new Map(prev);
+      for (const [key, state] of next) {
+        next.set(key, {
+          ...state,
+          cards: state.cards.map((c) => (c.id === updated.id ? updated : c)),
+        });
+      }
+      return next;
+    });
+    api.getCardStats().then(setStats);
+  }
+
   const totalShown = useMemo(() => groups?.reduce((sum, g) => sum + g.count, 0) ?? 0, [groups]);
 
   return (
@@ -400,6 +424,7 @@ export default function CardsPage() {
                                       idx={idx}
                                       busy={busyId === card.id}
                                       onToggleRevoke={toggleRevoke}
+                                      onSoldUpdated={handleSoldUpdated}
                                     />
                                   ))}
                                 </div>
