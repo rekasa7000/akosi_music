@@ -34,6 +34,17 @@ enum CardStatus {
   REVOKED
 }
 
+// Distinguishes an admin's manually-recorded sale (provisional — no
+// real checkout/payment system exists yet) from a fan's own future
+// claim-by-code/tap (verified by physical possession of the card).
+// Lets a later real claim flow treat the two differently — e.g. safely
+// overwrite a provisional admin record, but flag two FAN_CLAIM claims
+// colliding as something worth a closer look.
+enum CardOwnershipSource {
+  ADMIN_RECORDED
+  FAN_CLAIM
+}
+
 enum AdminAuthChallengeType {
   EMAIL_VERIFICATION
   PASSWORD_SETUP
@@ -237,10 +248,11 @@ model Card {
 }
 
 model CardOwnership {
-  id        String   @id @default(cuid())
-  cardId    String   @unique
+  id        String              @id @default(cuid())
+  cardId    String              @unique
   userId    String
-  claimedAt DateTime @default(now())
+  claimedAt DateTime            @default(now())
+  source    CardOwnershipSource @default(ADMIN_RECORDED)
 
   card Card @relation(fields: [cardId], references: [id])
   user User @relation(fields: [userId], references: [id])

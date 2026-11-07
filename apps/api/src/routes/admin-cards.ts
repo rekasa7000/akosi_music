@@ -3,6 +3,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "typebox";
 import { Prisma, prisma } from "@akosi/database";
 import { requireAdminSession } from "../auth/session.js";
+import { claimCardForUser, findOrCreateFanByEmail } from "../cards.js";
 
 // Phase 0.5: cards are manufactured manually (docs/11-mvp-phase0.md).
 // An admin provisions one by typing in its printed code (Card.uid)
@@ -50,6 +51,10 @@ const Card = Type.Object({
   artistId: Type.String(),
   artistName: Type.String(),
   playCount: Type.Integer(),
+  // Null unless status is CLAIMED — who the admin recorded this card as
+  // sold to (or who's claimed it for real, once that flow exists).
+  ownerEmail: Type.Union([Type.String(), Type.Null()]),
+  claimedAt: Type.Union([Type.String(), Type.Null()]),
 });
 
 const CardsPage = Type.Object({
@@ -81,9 +86,12 @@ const BulkCreateResponse = Type.Object({
   skipped: Type.Array(Type.Object({ uid: Type.String(), reason: Type.String() })),
 });
 
-async function serializeCards(
-  cards: Prisma.CardGetPayload<{ include: { track: { include: { release: { include: { artist: true } } } } } }>[],
-) {
+const CARD_SERIALIZE_INCLUDE = {
+  track: { include: { release: { include: { artist: true } } } },
+  ownership: { include: { user: { select: { email: true } } } },
+} satisfies Prisma.CardInclude;
+
+async function serializeCards(cards: Prisma.CardGetPayload<{ include: typeof CARD_SERIALIZE_INCLUDE }>[]) {
   const playCounts = await prisma.playEvent.groupBy({
     by: ["cardId"],
     where: { cardId: { in: cards.map((c) => c.id) } },
@@ -108,6 +116,8 @@ async function serializeCards(
         artistId: track.release.artist.id,
         artistName: track.release.artist.name,
         playCount: countByCard.get(c.id) ?? 0,
+        ownerEmail: c.ownership?.user.email ?? null,
+        claimedAt: c.ownership?.claimedAt.toISOString() ?? null,
       };
     });
 }
@@ -234,7 +244,7 @@ export async function adminCardRoutes(app: FastifyInstance) {
             artistId: track.release.artist.id,
             editionLabel,
           },
-          include: { track: { include: { release: { include: { artist: true } } } } },
+          include: CARD_SERIALIZE_INCLUDE,
         });
         return (await serializeCards([card]))[0];
       } catch (err) {
@@ -279,9 +289,7 @@ export async function adminCardRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: "Track not found." });
       }
 
-      const created: Prisma.CardGetPayload<{
-        include: { track: { include: { release: { include: { artist: true } } } } };
-      }>[] = [];
+      const created: Prisma.CardGetPayload<{ include: typeof CARD_SERIALIZE_INCLUDE }>[] = [];
       const skipped: { uid: string; reason: string }[] = [];
       // Duplicates within the pasted batch itself — caught here instead
       // of relying on the DB round-trip for a cheap, obvious case.
@@ -297,7 +305,7 @@ export async function adminCardRoutes(app: FastifyInstance) {
         try {
           const card = await prisma.card.create({
             data: { uid, trackId, artistId: track.release.artist.id, editionLabel },
-            include: { track: { include: { release: { include: { artist: true } } } } },
+            include: CARD_SERIALIZE_INCLUDE,
           });
           created.push(card);
         } catch (err) {
@@ -414,7 +422,7 @@ export async function adminCardRoutes(app: FastifyInstance) {
 
       const rows = await prisma.card.findMany({
         where,
-        include: { track: { include: { release: { include: { artist: true } } } } },
+        include: CARD_SERIALIZE_INCLUDE,
         orderBy: { id: "desc" },
         take: limit + 1,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -454,7 +462,39 @@ export async function adminCardRoutes(app: FastifyInstance) {
           ...(status !== undefined && { status }),
           ...(editionLabel !== undefined && { editionLabel }),
         },
-        include: { track: { include: { release: { include: { artist: true } } } } },
+        include: CARD_SERIALIZE_INCLUDE,
+      });
+      return (await serializeCards([card]))[0];
+    },
+  );
+
+  // One route covers both "mark as sold" (UNCLAIMED -> CLAIMED) and
+  // "reassign" (CLAIMED -> a different owner) — claimCardForUser's
+  // upsert makes both the same operation, so there's no separate state
+  // to branch on here.
+  typedApp.post(
+    "/admin/cards/:id/mark-sold",
+    {
+      preHandler: requireAdminSession,
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: Type.Object({ email: Type.String({ format: "email" }) }),
+        response: { 200: Card, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      const existing = await prisma.card.findUnique({ where: { id: request.params.id } });
+      if (!existing || !existing.trackId) {
+        return reply.code(404).send({ error: "Card not found." });
+      }
+
+      const user = await findOrCreateFanByEmail(request.body.email);
+      await claimCardForUser({ cardId: existing.id, userId: user.id, source: "ADMIN_RECORDED" });
+
+      const card = await prisma.card.findUniqueOrThrow({
+        where: { id: existing.id },
+        include: CARD_SERIALIZE_INCLUDE,
       });
       return (await serializeCards([card]))[0];
     },
