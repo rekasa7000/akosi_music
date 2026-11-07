@@ -157,7 +157,7 @@ const MAX_UPLOAD_BYTES: Record<MediaUploadPurpose, number> = {
   "track-cover": (Number(process.env.MAX_IMAGE_UPLOAD_MB) || 10) * 1024 * 1024,
   "artist-profile": (Number(process.env.MAX_IMAGE_UPLOAD_MB) || 10) * 1024 * 1024,
   "artist-cover": (Number(process.env.MAX_IMAGE_UPLOAD_MB) || 10) * 1024 * 1024,
-  "track-audio": (Number(process.env.MAX_AUDIO_UPLOAD_MB) || 25) * 1024 * 1024,
+  "track-audio": (Number(process.env.MAX_AUDIO_UPLOAD_MB) || 50) * 1024 * 1024,
   "track-video": (Number(process.env.MAX_VIDEO_UPLOAD_MB) || 200) * 1024 * 1024,
 };
 
