@@ -28,9 +28,9 @@ export async function adminStatsRoutes(app: FastifyInstance) {
     },
     async () => {
       const [artistCount, releaseCount, trackCount, totalPlays, cardsByStatus] = await Promise.all([
-        prisma.artist.count(),
-        prisma.release.count(),
-        prisma.track.count(),
+        prisma.artist.count({ where: { deletedAt: null } }),
+        prisma.release.count({ where: { deletedAt: null } }),
+        prisma.track.count({ where: { deletedAt: null } }),
         prisma.playEvent.count(),
         prisma.card.groupBy({ by: ["status"], where: { trackId: { not: null } }, _count: true }),
       ]);

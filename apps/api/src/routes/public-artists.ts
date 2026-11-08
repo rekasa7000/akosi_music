@@ -54,13 +54,16 @@ export async function publicArtistRoutes(app: FastifyInstance) {
     },
     async () => {
       const artists = await prisma.artist.findMany({
-        include: { releases: { include: { _count: { select: { tracks: true } } } } },
+        where: { deletedAt: null },
+        include: {
+          releases: { where: { deletedAt: null }, include: { _count: { select: { tracks: true } } } },
+        },
         orderBy: { name: "asc" },
       });
 
       const withReadyTracks = await prisma.track.groupBy({
         by: ["releaseId"],
-        where: { status: "READY" },
+        where: { status: "READY", deletedAt: null },
       });
       const releaseIdsWithReadyTracks = new Set(withReadyTracks.map((t) => t.releaseId));
 
@@ -94,11 +97,12 @@ export async function publicArtistRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const artist = await prisma.artist.findUnique({
-        where: { slug: request.params.slug },
+      const artist = await prisma.artist.findFirst({
+        where: { slug: request.params.slug, deletedAt: null },
         include: {
           releases: {
-            include: { _count: { select: { tracks: { where: { status: "READY" } } } } },
+            where: { deletedAt: null },
+            include: { _count: { select: { tracks: { where: { status: "READY", deletedAt: null } } } } },
             orderBy: { createdAt: "desc" },
           },
         },

@@ -32,7 +32,7 @@ export async function publicTrackRoutes(app: FastifyInstance) {
         where: { id: request.params.id },
         include: { cards: true },
       });
-      if (!track || track.status !== "READY") {
+      if (!track || track.status !== "READY" || track.deletedAt) {
         return reply.code(404).send({ error: "Track not found." });
       }
 

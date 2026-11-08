@@ -87,7 +87,7 @@ export async function artistTrackRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const track = await prisma.track.findFirst({
-        where: { id: request.params.id, release: { artist: { userId: request.artistUserId } } },
+        where: { id: request.params.id, release: { artist: { userId: request.artistUserId } }, deletedAt: null },
         include: { release: { include: { artist: true } } },
       });
       if (!track || track.status !== "READY") {
@@ -139,7 +139,7 @@ export async function artistTrackRoutes(app: FastifyInstance) {
         request.body;
 
       const release = await prisma.release.findFirst({
-        where: { id: releaseId, artist: { userId: request.artistUserId } },
+        where: { id: releaseId, artist: { userId: request.artistUserId }, deletedAt: null },
       });
       if (!release) {
         return reply.code(404).send({ error: "Release not found." });
@@ -203,7 +203,7 @@ export async function artistTrackRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const existing = await prisma.track.findFirst({
-        where: { id: request.params.id, release: { artist: { userId: request.artistUserId } } },
+        where: { id: request.params.id, release: { artist: { userId: request.artistUserId } }, deletedAt: null },
       });
       if (!existing) {
         return reply.code(404).send({ error: "Track not found." });

@@ -56,7 +56,16 @@ export async function publicCardRoutes(app: FastifyInstance) {
       // filter tracks — without this, a card provisioned against a
       // still-processing or failed track would leak its title/lyrics/
       // cover before the admin ever meant it to be reachable at all.
-      if (!card || !card.track || card.status === "REVOKED" || card.track.status !== "READY") {
+      // track.deletedAt is checked directly (not just relying on
+      // archiving a track having cascade-revoked its cards) as
+      // defense in depth.
+      if (
+        !card ||
+        !card.track ||
+        card.status === "REVOKED" ||
+        card.track.status !== "READY" ||
+        card.track.deletedAt
+      ) {
         return reply.code(404).send({ error: "Invalid or revoked card." });
       }
 

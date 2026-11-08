@@ -108,12 +108,12 @@ export async function publicReleaseRoutes(app: FastifyInstance) {
         where: { id: request.params.id },
         include: { artist: true, tracks: { include: { cards: true } } },
       });
-      if (!release) {
+      if (!release || release.deletedAt || release.artist.deletedAt) {
         return reply.code(404).send({ error: "Release not found." });
       }
 
       const readyTracks = release.tracks
-        .filter((t) => t.status === "READY")
+        .filter((t) => t.status === "READY" && !t.deletedAt)
         .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0));
       const tracks = await Promise.all(
         readyTracks.map((t) => serializeTrack(request, t, release.coverImageKey)),
