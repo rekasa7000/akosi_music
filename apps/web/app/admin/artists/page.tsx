@@ -7,6 +7,7 @@ import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { StageLight } from "@/components/admin/stage-light";
 import { NewArtistDialog } from "@/components/admin/catalog/new-artist-dialog";
+import { LifecycleMenu } from "@/components/admin/catalog/lifecycle-actions";
 import { FOIL_SWEEPS } from "@/lib/foil-sweeps";
 import { cn } from "@/lib/utils";
 
@@ -21,10 +22,16 @@ function initials(name: string): string {
 
 export default function ArtistsPage() {
   const [artists, setArtists] = useState<api.ArtistWithCounts[] | null>(null);
+  const [archived, setArchived] = useState(false);
 
   useEffect(() => {
-    api.listArtists().then(setArtists);
-  }, []);
+    setArtists(null);
+    api.listArtists({ archived }).then(setArtists);
+  }, [archived]);
+
+  function removeFromList(id: string) {
+    setArtists((prev) => prev?.filter((a) => a.id !== id) ?? prev);
+  }
 
   return (
     <AdminShell>
@@ -49,18 +56,45 @@ export default function ArtistsPage() {
                 Browse each artist&apos;s releases and tracks.
               </p>
             </div>
-            {artists ? (
+            {!archived && artists ? (
               <NewArtistDialog
-                onCreated={(a) => setArtists([{ ...a, releaseCount: 0, trackCount: 0 }, ...artists])}
+                onCreated={(a) =>
+                  setArtists([{ ...a, releaseCount: 0, trackCount: 0 }, ...artists])
+                }
               />
             ) : null}
           </div>
         </div>
 
+        <div className="mb-6 flex gap-2 text-sm">
+          <button
+            type="button"
+            onClick={() => setArchived(false)}
+            className={cn(
+              "rounded-full px-3 py-1.5 font-medium transition-colors",
+              !archived ? "bg-akosi-accent-2/15 text-akosi-accent-2" : "text-akosi-muted-fg hover:text-akosi-fg",
+            )}
+          >
+            Active
+          </button>
+          <button
+            type="button"
+            onClick={() => setArchived(true)}
+            className={cn(
+              "rounded-full px-3 py-1.5 font-medium transition-colors",
+              archived ? "bg-akosi-accent-2/15 text-akosi-accent-2" : "text-akosi-muted-fg hover:text-akosi-fg",
+            )}
+          >
+            Archived
+          </button>
+        </div>
+
         {artists === null ? (
           <p className="text-sm text-akosi-muted-fg">Loading…</p>
         ) : artists.length === 0 ? (
-          <p className="text-sm text-akosi-muted-fg">No artists yet — add one to get started.</p>
+          <p className="text-sm text-akosi-muted-fg">
+            {archived ? "No archived artists." : "No artists yet — add one to get started."}
+          </p>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {artists.map((artist, idx) => (
@@ -68,10 +102,37 @@ export default function ArtistsPage() {
                 key={artist.id}
                 href={`/admin/artists/${artist.id}`}
                 className={cn(
-                  "group overflow-hidden rounded-2xl border-2 border-akosi-fg/15 bg-akosi-surface transition-all duration-300 hover:-translate-y-1 hover:rotate-0 hover:border-akosi-accent-2/40 hover:shadow-[0_20px_40px_-24px] hover:shadow-akosi-accent/40",
+                  "group relative overflow-hidden rounded-2xl border-2 border-akosi-fg/15 bg-akosi-surface transition-all duration-300 hover:-translate-y-1 hover:rotate-0 hover:border-akosi-accent-2/40 hover:shadow-[0_20px_40px_-24px] hover:shadow-akosi-accent/40",
                   idx % 2 === 0 ? "-rotate-1" : "rotate-1",
+                  artist.deletedAt && "opacity-60",
                 )}
               >
+                <div
+                  className="absolute top-2 right-2 z-10 rounded-full bg-akosi-surface/90"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <LifecycleMenu
+                    deletedAt={artist.deletedAt}
+                    itemLabel="artist"
+                    size="sm"
+                    getCascadeCounts={() => api.getArtistCascadeCounts(artist.id)}
+                    onArchive={async () => {
+                      await api.archiveArtist(artist.id);
+                      removeFromList(artist.id);
+                    }}
+                    onRestore={async () => {
+                      await api.restoreArtist(artist.id);
+                      if (archived) removeFromList(artist.id);
+                    }}
+                    onDeletePermanently={async () => {
+                      await api.deleteArtistPermanently(artist.id);
+                      removeFromList(artist.id);
+                    }}
+                  />
+                </div>
                 <div
                   className="relative h-24"
                   style={!artist.coverImageUrl ? { background: FOIL_SWEEPS[idx % FOIL_SWEEPS.length] } : undefined}

@@ -12,6 +12,7 @@ import {
   PauseIcon,
   PlayIcon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CoverUploader } from "@/components/admin/catalog/cover-uploader";
 import { TrackPlayer } from "@/components/admin/track-player";
+import { LifecycleMenu } from "@/components/admin/catalog/lifecycle-actions";
 import { cn } from "@/lib/utils";
 
 function StatChip({
@@ -155,6 +157,7 @@ function PortalAccessPanel({
 
 export default function ArtistDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [artist, setArtist] = useState<api.ArtistDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const bioRef = useRef<HTMLTextAreaElement>(null);
@@ -204,13 +207,41 @@ export default function ArtistDetailPage() {
         <p className="p-8 text-sm text-akosi-muted-fg">Loading…</p>
       ) : (
         <div className="px-8 py-10">
-          <Link
-            href="/admin/artists"
-            className="mb-6 inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"
-          >
-            <ArrowLeftIcon className="size-3.5" />
-            Back to artists
-          </Link>
+          <div className="mb-6 flex items-center justify-between">
+            <Link
+              href="/admin/artists"
+              className="inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"
+            >
+              <ArrowLeftIcon className="size-3.5" />
+              Back to artists
+            </Link>
+            <LifecycleMenu
+              deletedAt={artist.deletedAt}
+              itemLabel="artist"
+              getCascadeCounts={() => api.getArtistCascadeCounts(artist.id)}
+              onArchive={async () => {
+                // Archiving cascades to this artist's releases/tracks
+                // (and revokes their cards) — refetch rather than
+                // merge so the nested lists reflect that too.
+                await api.archiveArtist(artist.id);
+                setArtist(await api.getArtist(artist.id));
+              }}
+              onRestore={async () => {
+                await api.restoreArtist(artist.id);
+                setArtist(await api.getArtist(artist.id));
+              }}
+              onDeletePermanently={async () => {
+                await api.deleteArtistPermanently(artist.id);
+                router.push("/admin/artists");
+              }}
+            />
+          </div>
+
+          {artist.deletedAt ? (
+            <p className="mb-6 rounded-xl border border-akosi-accent-2/30 bg-akosi-accent-2/10 px-4 py-2.5 text-sm text-akosi-accent-2">
+              This artist is archived — hidden from fans until restored.
+            </p>
+          ) : null}
 
           <CoverUploader
             purpose="artist-cover"
@@ -310,12 +341,22 @@ export default function ArtistDetailPage() {
             ) : (
               artist.releases.map((release) => (
                 <section key={release.id}>
-                  <Link
-                    href={`/admin/releases/${release.id}`}
-                    className="mb-3 inline-block font-display text-lg font-medium hover:underline"
-                  >
-                    {release.title}
-                  </Link>
+                  <div className="mb-3 flex items-center gap-2">
+                    <Link
+                      href={`/admin/releases/${release.id}`}
+                      className={cn(
+                        "inline-block font-display text-lg font-medium hover:underline",
+                        release.deletedAt && "text-akosi-muted-fg",
+                      )}
+                    >
+                      {release.title}
+                    </Link>
+                    {release.deletedAt ? (
+                      <Badge variant="outline" className="border-akosi-accent-2/30 text-akosi-accent-2">
+                        Archived
+                      </Badge>
+                    ) : null}
+                  </div>
                   {release.tracks.length === 0 ? (
                     <p className="text-sm text-akosi-muted-fg">No tracks yet.</p>
                   ) : (
@@ -329,6 +370,7 @@ export default function ArtistDetailPage() {
                             className={cn(
                               "flex items-center gap-4 px-5 py-3",
                               i !== 0 && "border-t border-akosi-fg/10",
+                              track.deletedAt && "opacity-60",
                             )}
                           >
                             <button
@@ -351,6 +393,11 @@ export default function ArtistDetailPage() {
                               )}
                             </button>
                             <p className="min-w-0 flex-1 truncate font-medium">{track.title}</p>
+                            {track.deletedAt ? (
+                              <Badge variant="outline" className="border-akosi-accent-2/30 text-akosi-accent-2">
+                                Archived
+                              </Badge>
+                            ) : null}
                             {track.locked ? (
                               <Badge
                                 variant="outline"
