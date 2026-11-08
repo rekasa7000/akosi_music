@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeftIcon, Loader2Icon, LockIcon, PauseIcon, PencilIcon, PlayIcon } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -11,6 +11,7 @@ import { CoverUploader } from "@/components/admin/catalog/cover-uploader";
 import { AddTrackForm } from "@/components/admin/catalog/add-track-form";
 import { EditTrackDialog } from "@/components/admin/catalog/edit-track-dialog";
 import { TrackPlayer } from "@/components/admin/track-player";
+import { LifecycleMenu } from "@/components/admin/catalog/lifecycle-actions";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -19,6 +20,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function ReleaseDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [release, setRelease] = useState<api.ReleaseWithTracks | null>(null);
   const [artist, setArtist] = useState<api.Artist | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -83,13 +85,42 @@ export default function ReleaseDetailPage() {
         <p className="p-8 text-sm text-akosi-muted-fg">Loading…</p>
       ) : (
         <main className="px-8 py-10">
-          <Link
-            href={`/admin/artists/${release.artistId}`}
-            className="mb-8 inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"
-          >
-            <ArrowLeftIcon className="size-3.5" />
-            Back to artist
-          </Link>
+          <div className="mb-8 flex items-center justify-between">
+            <Link
+              href={`/admin/artists/${release.artistId}`}
+              className="inline-flex items-center gap-1.5 text-sm text-akosi-muted-fg transition-colors hover:text-akosi-fg"
+            >
+              <ArrowLeftIcon className="size-3.5" />
+              Back to artist
+            </Link>
+            <LifecycleMenu
+              deletedAt={release.deletedAt}
+              itemLabel="release"
+              getCascadeCounts={() => api.getReleaseCascadeCounts(release.id)}
+              onArchive={async () => {
+                // Archiving cascades to this release's tracks (and
+                // revokes their cards) — refetch rather than merge so
+                // the track list reflects that, not just the release
+                // row itself.
+                await api.archiveRelease(release.id);
+                setRelease(await api.getRelease(release.id));
+              }}
+              onRestore={async () => {
+                await api.restoreRelease(release.id);
+                setRelease(await api.getRelease(release.id));
+              }}
+              onDeletePermanently={async () => {
+                await api.deleteReleasePermanently(release.id);
+                router.push(`/admin/artists/${release.artistId}`);
+              }}
+            />
+          </div>
+
+          {release.deletedAt ? (
+            <p className="mb-8 rounded-xl border border-akosi-accent-2/30 bg-akosi-accent-2/10 px-4 py-2.5 text-sm text-akosi-accent-2">
+              This release is archived — hidden from fans until restored.
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-10 border-b-2 border-akosi-fg/10 pb-10 lg:grid-cols-[18rem_1fr]">
             <CoverUploader
@@ -151,6 +182,7 @@ export default function ReleaseDetailPage() {
                       className={cn(
                         "relative flex items-center gap-4 overflow-hidden rounded-xl border-2 bg-akosi-surface py-3.5 pr-5 pl-6",
                         track.locked ? "border-akosi-accent-2/30" : "border-akosi-fg/10",
+                        track.deletedAt && "opacity-60",
                       )}
                     >
                       <div
@@ -182,6 +214,11 @@ export default function ReleaseDetailPage() {
                         )}
                       </button>
                       <p className="min-w-0 flex-1 truncate font-medium">{track.title}</p>
+                      {track.deletedAt ? (
+                        <Badge variant="outline" className="border-akosi-accent-2/30 text-akosi-accent-2">
+                          Archived
+                        </Badge>
+                      ) : null}
                       {track.locked ? (
                         <Badge className="gap-1 border-none bg-akosi-accent-2/15 text-akosi-accent-2">
                           <LockIcon className="size-3" />
@@ -197,14 +234,43 @@ export default function ReleaseDetailPage() {
                       >
                         {track.status}
                       </Badge>
-                      <button
-                        type="button"
-                        onClick={() => setEditingTrackId(track.id)}
-                        className="shrink-0 rounded-full p-1.5 text-akosi-muted-fg transition-colors hover:bg-akosi-fg/10 hover:text-akosi-fg"
-                      >
-                        <PencilIcon className="size-3.5" />
-                        <span className="sr-only">Edit track</span>
-                      </button>
+                      {!track.deletedAt ? (
+                        <button
+                          type="button"
+                          onClick={() => setEditingTrackId(track.id)}
+                          className="shrink-0 rounded-full p-1.5 text-akosi-muted-fg transition-colors hover:bg-akosi-fg/10 hover:text-akosi-fg"
+                        >
+                          <PencilIcon className="size-3.5" />
+                          <span className="sr-only">Edit track</span>
+                        </button>
+                      ) : null}
+                      <LifecycleMenu
+                        deletedAt={track.deletedAt}
+                        itemLabel="track"
+                        size="sm"
+                        getCascadeCounts={() => api.getTrackCascadeCounts(track.id)}
+                        onArchive={async () => {
+                          const updated = await api.archiveTrack(track.id);
+                          setRelease({
+                            ...release,
+                            tracks: release.tracks.map((t) => (t.id === track.id ? { ...t, ...updated } : t)),
+                          });
+                        }}
+                        onRestore={async () => {
+                          const updated = await api.restoreTrack(track.id);
+                          setRelease({
+                            ...release,
+                            tracks: release.tracks.map((t) => (t.id === track.id ? { ...t, ...updated } : t)),
+                          });
+                        }}
+                        onDeletePermanently={async () => {
+                          await api.deleteTrackPermanently(track.id);
+                          setRelease({
+                            ...release,
+                            tracks: release.tracks.filter((t) => t.id !== track.id),
+                          });
+                        }}
+                      />
                     </div>
                   );
                 })}
@@ -213,31 +279,34 @@ export default function ReleaseDetailPage() {
               <p className="mb-8 text-sm text-akosi-muted-fg">No tracks yet — add the first one below.</p>
             )}
 
-            <AddTrackForm
-              releaseId={release.id}
-              nextTrackNumber={release.tracks.length + 1}
-              uploadMedia={api.uploadMedia}
-              createTrack={api.createTrack}
-              onCreated={(track) =>
-                setRelease({
-                  ...release,
-                  tracks: [
-                    ...release.tracks,
-                    {
-                      id: track.id,
-                      title: track.title,
-                      trackNumber: track.trackNumber,
-                      mediaType: track.mediaType,
-                      status: track.status,
-                      lyrics: track.lyrics,
-                      coverImageKey: track.coverImageKey,
-                      cardCount: 0,
-                      locked: false,
-                    },
-                  ],
-                })
-              }
-            />
+            {!release.deletedAt ? (
+              <AddTrackForm
+                releaseId={release.id}
+                nextTrackNumber={release.tracks.length + 1}
+                uploadMedia={api.uploadMedia}
+                createTrack={api.createTrack}
+                onCreated={(track) =>
+                  setRelease({
+                    ...release,
+                    tracks: [
+                      ...release.tracks,
+                      {
+                        id: track.id,
+                        title: track.title,
+                        trackNumber: track.trackNumber,
+                        mediaType: track.mediaType,
+                        status: track.status,
+                        lyrics: track.lyrics,
+                        coverImageKey: track.coverImageKey,
+                        cardCount: 0,
+                        locked: false,
+                        deletedAt: null,
+                      },
+                    ],
+                  })
+                }
+              />
+            ) : null}
           </section>
         </main>
       )}
