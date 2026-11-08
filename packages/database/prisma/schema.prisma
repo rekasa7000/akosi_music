@@ -151,6 +151,10 @@ model Artist {
   approvedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  // Soft delete — set by the admin "Archive" action. Cascades to this
+  // artist's Releases/Tracks (and revokes their Cards) at the time of
+  // archiving; restoring only clears this field, not the children's.
+  deletedAt  DateTime?
 
   user     User?     @relation(fields: [userId], references: [id])
   releases Release[]
@@ -172,6 +176,8 @@ model Release {
   coverImageKey  String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  // Soft delete — see Artist.deletedAt for cascade semantics.
+  deletedAt  DateTime?
 
   artist Artist  @relation(fields: [artistId], references: [id])
   tracks Track[]
@@ -196,6 +202,8 @@ model Track {
   failureReason        String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Soft delete — see Artist.deletedAt for cascade semantics.
+  deletedAt   DateTime?
 
   release    Release     @relation(fields: [releaseId], references: [id])
   playEvents PlayEvent[]
