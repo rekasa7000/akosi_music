@@ -21,7 +21,8 @@ because the default is wrong in general:
   deploy uses a **Pro** subscription, which is explicitly licensed for
   commercial use, so that restriction doesn't apply here.
 - **API on Render**, not Coolify — once web is off Coolify, the API
-  alone costs ~$7/month on Render's Starter tier, which is cheap
+  alone costs ~$7/month on Render's `0.5c-512mb` plan (the old
+  "Starter" tier's resource-slug name post-rename), which is cheap
   enough that the "keep operating our own host" argument for Coolify
   (made in an earlier draft of this doc) no longer carries much
   weight. Render gives zero-downtime git-push deploys without
@@ -85,7 +86,7 @@ specific UX far more than raw capacity headroom ever would.
 | Layer | Pick | Why |
 |---|---|---|
 | Web hosting | **Vercel Pro** | Native Next.js platform; cost isn't a factor for this project's budget. See ownership note below. |
-| API hosting | **Render** (Starter tier) | Always-on, no cold start, ~$7/mo, zero-downtime git-push deploys |
+| API hosting | **Render** (`0.5c-512mb` plan) | Always-on, no cold start, ~$7/mo, zero-downtime git-push deploys |
 | Database | **Neon** | Permanent free tier (not a trial), works with Prisma via `DATABASE_URL` exactly like local Postgres |
 | Object storage | **Cloudflare R2** | Permanent free 10GB, zero egress fees — see above |
 | Email | **Gmail**, via SMTP | Free, no signup/verification beyond the Gmail account itself; comfortably covers admin login codes, the only email this app sends today |
@@ -106,7 +107,7 @@ continuity risk if that reimbursement arrangement ever changes.
 | Account | What for | Note |
 |---|---|---|
 | Vercel, Pro plan | Web hosting | Root Directory set to `apps/web` in the project's settings — see `apps/web/vercel.json` for the monorepo build config |
-| Render | API hosting | Starter tier (always-on); connect the GitHub repo, set Root Directory to `apps/api` |
+| Render | API hosting | `0.5c-512mb` plan (always-on); connect the GitHub repo, set Root Directory to `apps/api` |
 | Neon | Postgres | Free tier project, grab the pooled `DATABASE_URL` connection string |
 | Cloudflare, R2 enabled | Object storage | Create two buckets (`akosi-raw`, `akosi-media`, matching dev bucket names) and an R2 API token (access key + secret) |
 | Gmail | SMTP relay for admin OTP emails | Enable 2-Step Verification, then generate a 16-character App Password at https://myaccount.google.com/apppasswords — that password (not the account's login password) is `SMTP_PASSWORD` |
