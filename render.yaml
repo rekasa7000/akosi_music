@@ -4,6 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
+    region: singapore
     plan: starter
     healthCheckPath: /health
     # Runs against the newly built image before it takes traffic —
@@ -40,6 +41,10 @@ services:
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
         sync: false
       - key: SMTP_FROM
         sync: false

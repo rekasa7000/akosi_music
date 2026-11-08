@@ -31,3 +31,4 @@ Thumbs.db
 
 # Playwright MCP test screenshots (scratch, not meant to be committed)
 .playwright-mcp/
+.neon

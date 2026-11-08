@@ -86,7 +86,7 @@ variables are documented for the project.
 
 This project's actual deploy deviates from this default — see
 `13-deployment.md` for the decided stack (Vercel + Render + Neon +
-Cloudflare R2 + Resend) and why each layer departs from Path A, sized
+Cloudflare R2 + Gmail SMTP) and why each layer departs from Path A, sized
 against the actual card volume (~1,000 cards at launch, ~1,000/quarter
 after). The capacity math there shows traffic isn't what's driving
 these choices at this volume — cost ownership and avoiding cold starts

@@ -12,7 +12,18 @@ function getTransport(): Transporter {
   transport ??= nodemailer.createTransport({
     host: process.env.SMTP_HOST ?? "localhost",
     port: Number(process.env.SMTP_PORT ?? 1025),
-    secure: false,
+    // Port 465 is implicit TLS; everything else (587, Mailpit's 1025, ...)
+    // negotiates STARTTLS instead, so secure must stay false there.
+    secure: Number(process.env.SMTP_PORT ?? 1025) === 465,
+    // Mailpit (dev) takes unauthenticated connections, so auth is only
+    // attached once SMTP_USER is set — real providers (Gmail, etc.)
+    // always need it.
+    ...(process.env.SMTP_USER && {
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD,
+      },
+    }),
   });
   return transport;
 }

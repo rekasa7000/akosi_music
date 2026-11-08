@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { AlertTriangleIcon, SmartphoneIcon } from "lucide-react";
+import { AlertTriangleIcon, KeyRoundIcon, MusicIcon, SmartphoneIcon } from "lucide-react";
 import * as api from "@/lib/public-api";
 import { AkosiWordmark } from "@/components/admin/wordmark";
 import { NowPlayingHero } from "@/components/public/now-playing-hero";
 import { TapTracklist } from "@/components/public/tap-tracklist";
 import { TapInfoPanel } from "@/components/public/tap-info-panel";
+import { TrackCodeForm } from "@/components/public/track-code-form";
 import { useIsMobileViewport } from "@/lib/use-mobile-viewport";
 
-// The tap-landing route: this page's only job is forwarding the
-// card's code to the API and rendering what comes back, never
-// constructing a storage URL itself (docs/08-conventions.md).
+// The tap-landing route: the `id` in the URL identifies the release,
+// not a card — it's the same URL for everyone who taps any card tied
+// to this release, so it carries no unlock power on its own. Playback
+// only unlocks once a fan types in the serial printed on their
+// physical card via TrackCodeForm below; this page never auto-submits
+// anything from the URL (docs/08-conventions.md, docs/05-nfc-authentication.md).
 //
 // Fixed dark theme (the "dark" class forced on the root below,
 // independent of the site-wide light/dark toggle) — a Now Playing
@@ -41,7 +45,7 @@ function DesktopBlocked() {
 }
 
 export default function TapLandingPage() {
-  const params = useParams<{ code: string }>();
+  const params = useParams<{ id: string }>();
   const isMobile = useIsMobileViewport();
 
   const [release, setRelease] = useState<api.PublicRelease | null>(null);
@@ -52,13 +56,9 @@ export default function TapLandingPage() {
   useEffect(() => {
     let cancelled = false;
     api
-      .redeemCard(params.code)
-      .then((redeemed) => {
-        if (cancelled) return;
-        setNowPlayingId(redeemed.id);
-        return api.getRelease(redeemed.releaseId).then((r) => {
-          if (!cancelled) setRelease(r);
-        });
+      .getRelease(params.id)
+      .then((r) => {
+        if (!cancelled) setRelease(r);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof api.PublicApiError ? err.message : "Something went wrong.");
@@ -66,7 +66,7 @@ export default function TapLandingPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.code]);
+  }, [params.id]);
 
   useEffect(() => {
     if (!nowPlayingId) return;
@@ -108,13 +108,14 @@ export default function TapLandingPage() {
   }
 
   function handleUnlocked(redeemed: api.RedeemedTrack) {
-    // A card code is tied to one specific track on one specific
-    // release — if someone types in a code from a different card, the
-    // redeem call still succeeds server-side, but the track it returns
-    // won't be in this release's tracklist. Without this check, that
-    // silently breaks `nowPlayingTrack` lookup instead of surfacing why.
+    // A card's serial is tied to one specific track on one specific
+    // release — if someone types in a serial from a card for a
+    // different release, the redeem call still succeeds server-side,
+    // but the track it returns won't be in this release's tracklist.
+    // Without this check, that silently breaks `nowPlayingTrack`
+    // lookup instead of surfacing why.
     if (!release || !release.tracks.some((t) => t.id === redeemed.id)) {
-      throw new api.PublicApiError("That code is for a different release.");
+      throw new api.PublicApiError("That serial is for a different release.");
     }
     setRelease((prev) =>
       prev
@@ -164,13 +165,13 @@ export default function TapLandingPage() {
             <p className="mt-1 text-sm text-akosi-muted-fg">{error}</p>
           </div>
         </div>
-      ) : !release || !nowPlayingTrack ? (
+      ) : !release ? (
         <div className="flex min-h-[60vh] items-center justify-center">
-          <p className="text-sm text-akosi-muted-fg">Checking card…</p>
+          <p className="text-sm text-akosi-muted-fg">Loading…</p>
         </div>
       ) : (
         <>
-          {playback ? (
+          {playback && nowPlayingTrack ? (
             <NowPlayingHero
               key={nowPlayingTrack.id}
               url={playback.url}
@@ -184,10 +185,43 @@ export default function TapLandingPage() {
               hasNext={nextIndex >= 0}
             />
           ) : (
-            <div className="flex aspect-square w-full items-center justify-center px-5 pt-5">
-              <div className="flex size-full items-center justify-center rounded-2xl bg-akosi-surface">
-                <p className="text-sm text-akosi-muted-fg">Loading…</p>
+            <div className="px-5 pt-5">
+              <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl bg-linear-to-br from-akosi-accent/20 to-akosi-accent-2/20">
+                {release.coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={release.coverUrl} alt="" className="size-full object-cover opacity-30 blur-sm" />
+                ) : null}
+                <div className="absolute flex size-16 items-center justify-center rounded-full bg-akosi-bg/80 text-akosi-fg/70">
+                  {nowPlayingId ? (
+                    <MusicIcon className="size-7" strokeWidth={1.5} />
+                  ) : (
+                    <KeyRoundIcon className="size-7" strokeWidth={1.5} />
+                  )}
+                </div>
               </div>
+
+              <div className="mt-5 text-center">
+                <p className="truncate text-lg font-semibold text-akosi-fg">{release.title}</p>
+                <p className="mt-0.5 truncate text-sm text-akosi-muted-fg">{release.artistName}</p>
+              </div>
+
+              {!nowPlayingId ? (
+                <div className="mt-6 rounded-xl border-2 border-akosi-fg/10 bg-akosi-surface p-5">
+                  <p className="font-display text-base font-semibold text-akosi-fg">
+                    Enter your card&apos;s serial
+                  </p>
+                  <p className="mt-1 text-sm text-akosi-muted-fg">
+                    Type the code printed on your physical card to unlock its track.
+                  </p>
+                  <div className="mt-4">
+                    <TrackCodeForm onUnlocked={handleUnlocked} />
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-6 flex items-center justify-center">
+                  <p className="text-sm text-akosi-muted-fg">Loading…</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -200,14 +234,16 @@ export default function TapLandingPage() {
             />
           </div>
 
-          <div className="border-t-2 border-akosi-fg/10">
-            <TapInfoPanel
-              artist={release.artist}
-              lyrics={nowPlayingTrack.lyrics}
-              releaseId={release.id}
-              trackId={nowPlayingTrack.id}
-            />
-          </div>
+          {nowPlayingTrack ? (
+            <div className="border-t-2 border-akosi-fg/10">
+              <TapInfoPanel
+                artist={release.artist}
+                lyrics={nowPlayingTrack.lyrics}
+                releaseId={release.id}
+                trackId={nowPlayingTrack.id}
+              />
+            </div>
+          ) : null}
         </>
       )}
     </div>

@@ -1,7 +1,7 @@
 # Deployment
 
 **Decided stack: Vercel Pro (web) + Render (API) + Neon (Postgres) +
-Cloudflare R2 (storage) + Resend via SMTP (email).** This is the real
+Cloudflare R2 (storage) + Gmail via SMTP (email).** This is the real
 production deploy, live from day one — not a temporary staging setup
 replaced later. The sections below explain why each piece was picked
 and what's left to actually stand it up.
@@ -37,14 +37,18 @@ because the default is wrong in general:
   `S3_BUCKET_MEDIA`) — R2 implements the S3 API, so this is an env var
   change, not a code change. Same would be true of a later move to
   real AWS S3.
-- **Email via Resend's SMTP relay**, not their HTTP API/SDK —
-  `apps/api/src/auth/mailer.ts` already speaks SMTP through
-  `nodemailer` (that's how it reaches Mailpit in dev). Resend's SMTP
-  relay (`smtp.resend.com`) is a drop-in replacement for that — an env
-  var change (`SMTP_HOST`/`SMTP_PORT` + credentials), not a rewrite.
-  Their native SDK would mean rewriting `mailer.ts` to gain things
-  (open tracking, webhooks) this app doesn't need yet for a single
-  transactional OTP email.
+- **Email via Gmail's SMTP relay (`smtp.gmail.com`)**, not a
+  transactional provider like Resend or SES — `apps/api/src/auth/mailer.ts`
+  already speaks SMTP through `nodemailer` (that's how it reaches
+  Mailpit in dev); Gmail is a drop-in replacement, an env var change
+  (`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`), not a rewrite.
+  Auth is a Gmail **App Password** (16 characters, requires 2-Step
+  Verification on the account), not the account's login password.
+  Chosen over a dedicated provider because the one email this app
+  sends today (admin login codes) doesn't need deliverability
+  tooling, open tracking, or webhooks — if volume or deliverability
+  ever becomes a problem, a provider is a `mailer.ts` + env var swap
+  away, same as this swap was.
 
 ## The capacity math (why Render's smallest tier is enough)
 
@@ -84,7 +88,7 @@ specific UX far more than raw capacity headroom ever would.
 | API hosting | **Render** (Starter tier) | Always-on, no cold start, ~$7/mo, zero-downtime git-push deploys |
 | Database | **Neon** | Permanent free tier (not a trial), works with Prisma via `DATABASE_URL` exactly like local Postgres |
 | Object storage | **Cloudflare R2** | Permanent free 10GB, zero egress fees — see above |
-| Email | **Resend**, via SMTP | Free tier (100/day, 3,000/mo) comfortably covers admin login codes, the only email this app sends today |
+| Email | **Gmail**, via SMTP | Free, no signup/verification beyond the Gmail account itself; comfortably covers admin login codes, the only email this app sends today |
 | Secrets | Render's and Vercel's own env var stores | Never a plaintext `.env` in production, per the key-storage rule in `04-tech-stack.md` |
 | CI/CD | Native git-push deploys on both platforms | Neither Vercel nor Render needs a custom GitHub Actions pipeline for deploys — Render supports a **Pre-Deploy Command** (runs `prisma migrate deploy` before the new instance takes traffic), which covers the one thing that actually needs an explicit step |
 
@@ -105,7 +109,7 @@ continuity risk if that reimbursement arrangement ever changes.
 | Render | API hosting | Starter tier (always-on); connect the GitHub repo, set Root Directory to `apps/api` |
 | Neon | Postgres | Free tier project, grab the pooled `DATABASE_URL` connection string |
 | Cloudflare, R2 enabled | Object storage | Create two buckets (`akosi-raw`, `akosi-media`, matching dev bucket names) and an R2 API token (access key + secret) |
-| Resend | SMTP relay for admin OTP emails | Free tier API key, used as SMTP credentials; verify a sending domain (or use their sandbox domain until one's ready) |
+| Gmail | SMTP relay for admin OTP emails | Enable 2-Step Verification, then generate a 16-character App Password at https://myaccount.google.com/apppasswords — that password (not the account's login password) is `SMTP_PASSWORD` |
 
 ## Env var mapping (dev → production)
 
@@ -115,8 +119,9 @@ continuity risk if that reimbursement arrangement ever changes.
 | `S3_ENDPOINT` | `http://localhost:4566` (LocalStack) | R2 account endpoint |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | LocalStack dummy creds | R2 API token |
 | `S3_BUCKET_RAW` / `S3_BUCKET_MEDIA` | `akosi-raw` / `akosi-media` | same names, created in R2 |
-| `SMTP_HOST` / `SMTP_PORT` | Mailpit (`localhost:1025`) | Resend's SMTP relay (`smtp.resend.com`, port 587) |
-| `SMTP_FROM` | `admin@akosi.local` | a real address on the verified sending domain |
+| `SMTP_HOST` / `SMTP_PORT` | Mailpit (`localhost:1025`) | Gmail's SMTP relay (`smtp.gmail.com`, port 587) |
+| `SMTP_USER` / `SMTP_PASSWORD` | unset (Mailpit takes unauthenticated connections) | the Gmail address and its 16-character App Password |
+| `SMTP_FROM` | `admin@akosi.local` | the same Gmail address |
 | `JWT_SECRET` / `TOTP_ENCRYPTION_KEY` | example placeholders | freshly generated, stored only in Render's env var store |
 | `ENABLE_DEV_UPLOAD_ROUTES` | `true` | **must be unset or `false`** — this flag hard-disables the unauthenticated storage demo routes outside `NODE_ENV=development`, but don't rely on that alone; the var itself should not be set to `true` anywhere this deploy can read it |
 | `WEB_ORIGIN` (api) | `http://localhost:3000,http://localhost:3001` | the deployed Vercel production URL (and any preview URLs that need API access) |
