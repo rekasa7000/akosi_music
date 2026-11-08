@@ -14,6 +14,14 @@ import {
   MEDIA_BUCKET,
   createPresignedPlaybackUrl,
 } from "../storage.js";
+import {
+  archiveArtist,
+  restoreArtist,
+  deleteArtistPermanently,
+  artistCascadeCounts,
+  NotFoundError,
+  NotArchivedError,
+} from "../catalog-lifecycle.js";
 
 const Artist = Type.Object({
   id: Type.String(),
@@ -28,7 +36,10 @@ const Artist = Type.Object({
   facebookUrl: Type.Union([Type.String(), Type.Null()]),
   spotifyUrl: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String(),
+  deletedAt: Type.Union([Type.String(), Type.Null()]),
 });
+
+const CascadeCounts = Type.Object({ releases: Type.Integer(), tracks: Type.Integer(), cards: Type.Integer() });
 
 const ErrorResponse = Type.Object({ error: Type.String() });
 
@@ -54,6 +65,7 @@ async function serializeArtist(artist: {
   facebookUrl: string | null;
   spotifyUrl: string | null;
   createdAt: Date;
+  deletedAt: Date | null;
 }) {
   return {
     id: artist.id,
@@ -68,6 +80,7 @@ async function serializeArtist(artist: {
     facebookUrl: artist.facebookUrl,
     spotifyUrl: artist.spotifyUrl,
     createdAt: artist.createdAt.toISOString(),
+    deletedAt: artist.deletedAt?.toISOString() ?? null,
   };
 }
 
@@ -85,6 +98,7 @@ const ArtistTrack = Type.Object({
   playCount: Type.Integer(),
   cardCount: Type.Integer(),
   locked: Type.Boolean(),
+  deletedAt: Type.Union([Type.String(), Type.Null()]),
 });
 
 const ArtistRelease = Type.Object({
@@ -92,6 +106,7 @@ const ArtistRelease = Type.Object({
   title: Type.String(),
   releasedAt: Type.Union([Type.String(), Type.Null()]),
   tracks: Type.Array(ArtistTrack),
+  deletedAt: Type.Union([Type.String(), Type.Null()]),
 });
 
 const AccountStatus = Type.Union([Type.Literal("NONE"), Type.Literal("PENDING"), Type.Literal("ACTIVE")]);
@@ -154,11 +169,14 @@ export async function adminArtistRoutes(app: FastifyInstance) {
     {
       preHandler: requireAdminSession,
       schema: {
+        querystring: Type.Object({ archived: Type.Optional(Type.Boolean()) }),
         response: { 200: Type.Array(ArtistWithCounts) },
       },
     },
-    async () => {
+    async (request) => {
+      const { archived = false } = request.query;
       const artists = await prisma.artist.findMany({
+        where: { deletedAt: archived ? { not: null } : null },
         orderBy: { createdAt: "desc" },
         include: { releases: { select: { _count: { select: { tracks: true } } } } },
       });
@@ -228,6 +246,7 @@ export async function adminArtistRoutes(app: FastifyInstance) {
           id: release.id,
           title: release.title,
           releasedAt: release.releasedAt?.toISOString() ?? null,
+          deletedAt: release.deletedAt?.toISOString() ?? null,
           tracks: release.tracks.map((track) => ({
             id: track.id,
             title: track.title,
@@ -237,6 +256,7 @@ export async function adminArtistRoutes(app: FastifyInstance) {
             playCount: playCountByTrack.get(track.id) ?? 0,
             cardCount: cardCountByTrack.get(track.id) ?? 0,
             locked: everHadCardTrackIds.has(track.id),
+            deletedAt: track.deletedAt?.toISOString() ?? null,
           })),
         })),
       };
@@ -368,6 +388,77 @@ export async function adminArtistRoutes(app: FastifyInstance) {
       });
 
       return { ok: true as const };
+    },
+  );
+
+  typedApp.post(
+    "/admin/artists/:id/archive",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Artist, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return await serializeArtist(await archiveArtist(request.params.id));
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        throw err;
+      }
+    },
+  );
+
+  typedApp.post(
+    "/admin/artists/:id/restore",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Artist, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return await serializeArtist(await restoreArtist(request.params.id));
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        throw err;
+      }
+    },
+  );
+
+  typedApp.get(
+    "/admin/artists/:id/cascade-counts",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: CascadeCounts },
+      },
+    },
+    async (request) => artistCascadeCounts(request.params.id),
+  );
+
+  typedApp.delete(
+    "/admin/artists/:id",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Type.Object({ ok: Type.Literal(true) }), 404: ErrorResponse, 409: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        await deleteArtistPermanently(request.params.id);
+        return { ok: true as const };
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        if (err instanceof NotArchivedError) return reply.code(409).send({ error: err.message });
+        throw err;
+      }
     },
   );
 }

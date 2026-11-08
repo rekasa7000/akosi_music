@@ -12,6 +12,14 @@ import {
   createPresignedPlaybackUrl,
   type MediaUploadPurpose,
 } from "../storage.js";
+import {
+  archiveTrack,
+  restoreTrack,
+  deleteTrackPermanently,
+  trackCascadeCounts,
+  NotFoundError,
+  NotArchivedError,
+} from "../catalog-lifecycle.js";
 
 const MediaType = Type.Union([Type.Literal("AUDIO"), Type.Literal("VIDEO")]);
 
@@ -26,7 +34,10 @@ const TrackDetail = Type.Object({
   coverImageKey: Type.Union([Type.String(), Type.Null()]),
   status: Type.String(),
   createdAt: Type.String(),
+  deletedAt: Type.Union([Type.String(), Type.Null()]),
 });
+
+const CascadeCounts = Type.Object({ cards: Type.Integer() });
 
 const ErrorResponse = Type.Object({ error: Type.String() });
 
@@ -41,6 +52,7 @@ function serializeTrack(track: {
   coverImageKey: string | null;
   status: string;
   createdAt: Date;
+  deletedAt: Date | null;
 }) {
   return {
     id: track.id,
@@ -53,6 +65,7 @@ function serializeTrack(track: {
     coverImageKey: track.coverImageKey,
     status: track.status,
     createdAt: track.createdAt.toISOString(),
+    deletedAt: track.deletedAt?.toISOString() ?? null,
   };
 }
 
@@ -93,7 +106,7 @@ export async function adminTrackRoutes(app: FastifyInstance) {
     },
     async () => {
       const tracks = await prisma.track.findMany({
-        where: { status: "READY" },
+        where: { status: "READY", deletedAt: null },
         include: { release: { include: { artist: true } } },
         orderBy: { createdAt: "desc" },
       });
@@ -267,6 +280,77 @@ export async function adminTrackRoutes(app: FastifyInstance) {
 
       const track = await prisma.track.update({ where: { id: existing.id }, data });
       return serializeTrack(track);
+    },
+  );
+
+  typedApp.post(
+    "/admin/tracks/:id/archive",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: TrackDetail, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return serializeTrack(await archiveTrack(request.params.id));
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        throw err;
+      }
+    },
+  );
+
+  typedApp.post(
+    "/admin/tracks/:id/restore",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: TrackDetail, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return serializeTrack(await restoreTrack(request.params.id));
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        throw err;
+      }
+    },
+  );
+
+  typedApp.get(
+    "/admin/tracks/:id/cascade-counts",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: CascadeCounts },
+      },
+    },
+    async (request) => trackCascadeCounts(request.params.id),
+  );
+
+  typedApp.delete(
+    "/admin/tracks/:id",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Type.Object({ ok: Type.Literal(true) }), 404: ErrorResponse, 409: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        await deleteTrackPermanently(request.params.id);
+        return { ok: true as const };
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        if (err instanceof NotArchivedError) return reply.code(409).send({ error: err.message });
+        throw err;
+      }
     },
   );
 }

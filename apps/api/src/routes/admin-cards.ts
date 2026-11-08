@@ -4,6 +4,7 @@ import { Type } from "typebox";
 import { Prisma, prisma } from "@akosi/database";
 import { requireAdminSession } from "../auth/session.js";
 import { claimCardForUser, findOrCreateFanByEmail } from "../cards.js";
+import { deleteCardPermanently, NotFoundError, NotArchivedError } from "../catalog-lifecycle.js";
 
 // Phase 0.5: cards are manufactured manually (docs/11-mvp-phase0.md).
 // An admin provisions one by typing in its printed code (Card.uid)
@@ -497,6 +498,27 @@ export async function adminCardRoutes(app: FastifyInstance) {
         include: CARD_SERIALIZE_INCLUDE,
       });
       return (await serializeCards([card]))[0];
+    },
+  );
+
+  typedApp.delete(
+    "/admin/cards/:id",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Type.Object({ ok: Type.Literal(true) }), 404: ErrorResponse, 409: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        await deleteCardPermanently(request.params.id);
+        return { ok: true as const };
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        if (err instanceof NotArchivedError) return reply.code(409).send({ error: err.message });
+        throw err;
+      }
     },
   );
 }

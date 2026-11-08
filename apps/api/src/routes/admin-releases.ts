@@ -11,6 +11,14 @@ import {
   MEDIA_BUCKET,
   createPresignedPlaybackUrl,
 } from "../storage.js";
+import {
+  archiveRelease,
+  restoreRelease,
+  deleteReleasePermanently,
+  releaseCascadeCounts,
+  NotFoundError,
+  NotArchivedError,
+} from "../catalog-lifecycle.js";
 
 const Track = Type.Object({
   id: Type.String(),
@@ -22,6 +30,7 @@ const Track = Type.Object({
   coverImageKey: Type.Union([Type.String(), Type.Null()]),
   cardCount: Type.Integer(),
   locked: Type.Boolean(),
+  deletedAt: Type.Union([Type.String(), Type.Null()]),
 });
 
 const Release = Type.Object({
@@ -31,7 +40,10 @@ const Release = Type.Object({
   releasedAt: Type.Union([Type.String(), Type.Null()]),
   coverImageKey: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String(),
+  deletedAt: Type.Union([Type.String(), Type.Null()]),
 });
+
+const CascadeCounts = Type.Object({ tracks: Type.Integer(), cards: Type.Integer() });
 
 const ReleaseWithTracks = Type.Intersect([Release, Type.Object({ tracks: Type.Array(Track) })]);
 
@@ -58,6 +70,7 @@ function serializeRelease(release: {
   releasedAt: Date | null;
   coverImageKey: string | null;
   createdAt: Date;
+  deletedAt: Date | null;
 }) {
   return {
     id: release.id,
@@ -66,6 +79,7 @@ function serializeRelease(release: {
     releasedAt: release.releasedAt?.toISOString() ?? null,
     coverImageKey: release.coverImageKey,
     createdAt: release.createdAt.toISOString(),
+    deletedAt: release.deletedAt?.toISOString() ?? null,
   };
 }
 
@@ -102,10 +116,15 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
     "/admin/releases",
     {
       preHandler: requireAdminSession,
-      schema: { response: { 200: Type.Array(ReleaseSummary) } },
+      schema: {
+        querystring: Type.Object({ archived: Type.Optional(Type.Boolean()) }),
+        response: { 200: Type.Array(ReleaseSummary) },
+      },
     },
-    async () => {
+    async (request) => {
+      const { archived = false } = request.query;
       const releases = await prisma.release.findMany({
+        where: { deletedAt: archived ? { not: null } : null },
         orderBy: { createdAt: "desc" },
         include: { artist: true, _count: { select: { tracks: true } } },
       });
@@ -154,6 +173,7 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
           // here, signaling "needs a new card," not "is public."
           cardCount: track.cards.filter((c) => c.status !== "REVOKED").length,
           locked: track.cards.length > 0,
+          deletedAt: track.deletedAt?.toISOString() ?? null,
         })),
       };
     },
@@ -202,6 +222,77 @@ export async function adminReleaseRoutes(app: FastifyInstance) {
 
       const release = await prisma.release.update({ where: { id: existing.id }, data });
       return serializeRelease(release);
+    },
+  );
+
+  typedApp.post(
+    "/admin/releases/:id/archive",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Release, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return serializeRelease(await archiveRelease(request.params.id));
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        throw err;
+      }
+    },
+  );
+
+  typedApp.post(
+    "/admin/releases/:id/restore",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Release, 404: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return serializeRelease(await restoreRelease(request.params.id));
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        throw err;
+      }
+    },
+  );
+
+  typedApp.get(
+    "/admin/releases/:id/cascade-counts",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: CascadeCounts },
+      },
+    },
+    async (request) => releaseCascadeCounts(request.params.id),
+  );
+
+  typedApp.delete(
+    "/admin/releases/:id",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Type.Object({ ok: Type.Literal(true) }), 404: ErrorResponse, 409: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      try {
+        await deleteReleasePermanently(request.params.id);
+        return { ok: true as const };
+      } catch (err) {
+        if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+        if (err instanceof NotArchivedError) return reply.code(409).send({ error: err.message });
+        throw err;
+      }
     },
   );
 }
