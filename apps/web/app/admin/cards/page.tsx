@@ -8,6 +8,7 @@ import {
   CreditCardIcon,
   Loader2Icon,
   SearchIcon,
+  Trash2Icon,
   XCircleIcon,
 } from "lucide-react";
 import * as api from "@/lib/admin-api";
@@ -27,6 +28,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { FOIL_SWEEPS } from "@/lib/foil-sweeps";
 import { cn } from "@/lib/utils";
 
@@ -47,18 +59,85 @@ type GroupState = {
   loadingMore: boolean;
 };
 
+function DeleteCardPermanentlyButton({ card, onDeleted }: { card: api.Card; onDeleted: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteCardPermanently(card.id);
+      setOpen(false);
+      onDeleted(card.id);
+    } catch (err) {
+      setError(err instanceof api.AdminApiError ? err.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setError(null);
+      }}
+    >
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="shrink-0 text-akosi-muted-fg hover:text-akosi-accent-2"
+        >
+          <Trash2Icon className="size-3.5" />
+          <span className="sr-only">Delete permanently</span>
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this card permanently?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This deletes code &quot;{card.uid}&quot; and its play/ownership history. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error ? (
+          <p role="alert" className="text-sm text-akosi-accent-2">
+            {error}
+          </p>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={busy}
+            onClick={handleDelete}
+            className="bg-akosi-accent-2! text-white! hover:bg-akosi-accent-2/90!"
+          >
+            {busy ? "Deleting…" : "Delete permanently"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function CardRow({
   card,
   idx,
   busy,
   onToggleRevoke,
   onSoldUpdated,
+  onDeleted,
 }: {
   card: api.Card;
   idx: number;
   busy: boolean;
   onToggleRevoke: (card: api.Card) => void;
   onSoldUpdated: (card: api.Card) => void;
+  onDeleted: (id: string) => void;
 }) {
   return (
     <div
@@ -119,6 +198,7 @@ function CardRow({
       >
         {card.status === "REVOKED" ? "Restore" : "Revoke"}
       </Button>
+      {card.status === "REVOKED" ? <DeleteCardPermanentlyButton card={card} onDeleted={onDeleted} /> : null}
     </div>
   );
 }
@@ -290,6 +370,22 @@ export default function CardsPage() {
     api.getCardStats().then(setStats);
   }
 
+  // DeleteCardPermanentlyButton already made the API call — this
+  // removes the now-gone card from every open group and refreshes
+  // counts (its group's `count` is stale otherwise).
+  async function handleCardDeleted(id: string) {
+    setExpanded((prev) => {
+      const next = new Map(prev);
+      for (const [key, state] of next) {
+        next.set(key, { ...state, cards: state.cards.filter((c) => c.id !== id) });
+      }
+      return next;
+    });
+    api.getCardStats().then(setStats);
+    const freshGroups = await api.listCardGroups({ groupBy, search: search || undefined });
+    setGroups(freshGroups);
+  }
+
   const totalShown = useMemo(() => groups?.reduce((sum, g) => sum + g.count, 0) ?? 0, [groups]);
 
   return (
@@ -425,6 +521,7 @@ export default function CardsPage() {
                                       busy={busyId === card.id}
                                       onToggleRevoke={toggleRevoke}
                                       onSoldUpdated={handleSoldUpdated}
+                                      onDeleted={handleCardDeleted}
                                     />
                                   ))}
                                 </div>
