@@ -115,6 +115,25 @@ export function changePassword(currentPassword: string, newPassword: string) {
   });
 }
 
+export type AdminAccount = {
+  id: string;
+  email: string;
+  isSelf: boolean;
+  status: "PENDING" | "ACTIVE";
+  createdAt: string;
+};
+
+export function listAdmins() {
+  return request<AdminAccount[]>("/admin/admins");
+}
+
+export function inviteAdmin(email: string) {
+  return request<{ ok: true }>("/admin/admins/invite", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
 // --- Catalog (artists / releases / tracks / media) ---
 // docs/11-mvp-phase0.md — mirrors apps/api's admin-artists/releases/tracks/media routes.
 

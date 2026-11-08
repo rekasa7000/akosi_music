@@ -15,6 +15,8 @@ import {
   verifyChallengeCode,
 } from "../auth/challenges.js";
 import { issueSession, clearSession, requireAdminSession } from "../auth/session.js";
+import { generateChallengeToken } from "../auth/crypto.js";
+import { sendMail } from "../auth/mailer.js";
 
 const Step = Type.Union([
   Type.Literal("SET_EMAIL"),
@@ -363,6 +365,114 @@ export async function adminAuthRoutes(app: FastifyInstance) {
       // browser a fresh token stamped after the change, so the admin
       // who actually made the change stays logged in.
       await issueSession(app, reply, user.id);
+
+      return { ok: true as const };
+    },
+  );
+
+  // Every other admin account exists only because this route (or the
+  // one-time seed script) created it — there's no self-serve admin
+  // signup, same invariant as the bootstrap account itself. Listed
+  // here, not in a separate file, because it's squarely about admin
+  // *account* lifecycle, same reasoning as why this lives next to
+  // /admin/change-password rather than off on its own.
+  typedApp.get(
+    "/admin/admins",
+    {
+      preHandler: requireAdminSession,
+      schema: {
+        response: {
+          200: Type.Array(
+            Type.Object({
+              id: Type.String(),
+              email: Type.String(),
+              isSelf: Type.Boolean(),
+              status: Type.Union([Type.Literal("PENDING"), Type.Literal("ACTIVE")]),
+              createdAt: Type.String(),
+            }),
+          ),
+        },
+      },
+    },
+    async (request) => {
+      const admins = await prisma.user.findMany({
+        where: { role: "ADMIN" },
+        orderBy: { createdAt: "asc" },
+      });
+      return admins.map((a) => ({
+        id: a.id,
+        email: a.email,
+        isSelf: a.id === request.adminUserId,
+        // "Active" means fully through setup, not just password-set —
+        // an admin who stalled mid-TOTP-enrollment still has a
+        // passwordHash someone else could brute-force without the
+        // second factor the UI implies every admin has.
+        status: a.totpConfirmedAt ? ("ACTIVE" as const) : ("PENDING" as const),
+        createdAt: a.createdAt.toISOString(),
+      }));
+    },
+  );
+
+  // Invites (or re-invites) another admin by email. The invited email
+  // is trusted and marked verified immediately, unlike the bootstrap
+  // flow's SET_EMAIL/EMAIL_VERIFICATION steps — those exist to prove
+  // the *bootstrap* identity (a shared, non-email credential) maps to
+  // a real inbox the admin controls. Here the email is already the
+  // delivery address: receiving this invite (which contains the only
+  // copy of the temp password — never returned to the inviting admin)
+  // already proves inbox control, so asking for a second proof would
+  // be redundant, not more secure. First login lands straight at
+  // PASSWORD_SETUP, then TOTP_ENROLLMENT.
+  typedApp.post(
+    "/admin/admins/invite",
+    {
+      preHandler: requireAdminSession,
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+      schema: {
+        body: Type.Object({ email: Type.String({ format: "email" }) }),
+        response: { 200: Type.Object({ ok: Type.Literal(true) }), 409: ErrorResponse },
+      },
+    },
+    async (request, reply) => {
+      const { email } = request.body;
+      const tempPassword = generateChallengeToken();
+      const passwordHash = await hash(tempPassword);
+
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing && existing.role !== "ADMIN") {
+        return reply.code(409).send({ error: "That email is already in use by another account." });
+      }
+      if (existing && existing.id === request.adminUserId) {
+        // Resetting your own row here would hand you a temp password
+        // only the invite email (sent to yourself) contains, and
+        // nothing stops that email already being open in another tab
+        // — the actual self-serve path (Settings → change password)
+        // requires your *current* password instead of a session alone.
+        return reply.code(409).send({ error: "Use Settings to change your own password." });
+      }
+
+      if (existing) {
+        // Resend (still pending) or reset (already active) — both
+        // overwrite the password and clear passwordSetAt, same as the
+        // artist-invite route. totpConfirmedAt is left untouched: an
+        // admin who already enrolled a second factor shouldn't have
+        // to redo it just because their password got reset.
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { passwordHash, passwordSetAt: null },
+        });
+      } else {
+        await prisma.user.create({
+          data: { email, role: "ADMIN", passwordHash, emailVerifiedAt: new Date() },
+        });
+      }
+
+      const webOrigin = (process.env.WEB_ORIGIN ?? "http://localhost:3000").split(",")[0].trim();
+      await sendMail({
+        to: email,
+        subject: "You're invited to the akosi.music admin panel",
+        text: `You've been invited as an admin on akosi.music.\n\nSign in at ${webOrigin}/admin/login with:\n\nEmail: ${email}\nTemporary password: ${tempPassword}\n\nYou'll be asked to set a real password and enroll two-factor authentication (an authenticator app) on first sign-in.`,
+      });
 
       return { ok: true as const };
     },

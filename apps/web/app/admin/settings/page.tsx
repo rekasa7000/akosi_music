@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2Icon, ClockIcon, KeyRoundIcon, MailIcon, ShieldAlertIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  ClockIcon,
+  KeyRoundIcon,
+  MailIcon,
+  ShieldAlertIcon,
+  UsersIcon,
+} from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Button } from "@/components/ui/button";
@@ -27,9 +34,33 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const [admins, setAdmins] = useState<api.AdminAccount[] | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     api.me().then(setMe);
+    api.listAdmins().then(setAdmins);
   }, []);
+
+  async function handleInviteSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setInviteError(null);
+    setInviteSuccess(null);
+    setInviteBusy(true);
+    try {
+      await api.inviteAdmin(inviteEmail);
+      setInviteSuccess(`Invite sent to ${inviteEmail}.`);
+      setInviteEmail("");
+      setAdmins(await api.listAdmins());
+    } catch (err) {
+      setInviteError(err instanceof api.AdminApiError ? err.message : "Something went wrong.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
 
   function reset() {
     setCurrentPassword("");
@@ -172,6 +203,87 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </form>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border-2 border-akosi-fg/10 bg-akosi-surface">
+              <div className="flex items-center gap-3 border-b-2 border-akosi-fg/10 px-6 py-5">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-akosi-accent/15 text-akosi-accent">
+                  <UsersIcon className="size-4.5" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold">Admins</h2>
+                  <p className="text-sm text-akosi-muted-fg">
+                    Each admin signs in with their own email and authenticator app — no shared
+                    accounts.
+                  </p>
+                </div>
+              </div>
+
+              <div className="divide-y divide-akosi-fg/10">
+                {!admins ? (
+                  <p className="px-6 py-5 text-sm text-akosi-muted-fg">Loading…</p>
+                ) : (
+                  admins.map((a) => (
+                    <div key={a.id} className="flex items-center justify-between gap-3 px-6 py-4">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-akosi-fg">
+                          {a.email}
+                          {a.isSelf ? <span className="text-akosi-muted-fg"> (you)</span> : null}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
+                          a.status === "ACTIVE"
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                            : "bg-akosi-fg/10 text-akosi-muted-fg",
+                        )}
+                      >
+                        {a.status === "ACTIVE" ? "Active" : "Pending setup"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <form
+                className="flex items-end gap-3 border-t-2 border-akosi-fg/10 px-6 py-5"
+                onSubmit={handleInviteSubmit}
+              >
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Label htmlFor="invite-email">Invite another admin</Label>
+                  <Input
+                    id="invite-email"
+                    type="email"
+                    placeholder="teammate@email.com"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={inviteBusy}
+                  className={cn("bg-akosi-accent! text-white! hover:bg-akosi-accent-2!", "disabled:opacity-60")}
+                >
+                  {inviteBusy ? "Sending…" : "Send invite"}
+                </Button>
+              </form>
+              {inviteError ? (
+                <div
+                  role="alert"
+                  className="mx-6 mb-5 flex items-start gap-2 rounded-lg border border-akosi-accent-2/30 bg-akosi-accent-2/10 px-4 py-3 text-sm text-akosi-accent-2"
+                >
+                  <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" />
+                  {inviteError}
+                </div>
+              ) : null}
+              {inviteSuccess ? (
+                <div className="mx-6 mb-5 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2Icon className="mt-0.5 size-4 shrink-0" />
+                  {inviteSuccess}
+                </div>
+              ) : null}
             </div>
           </div>
         )}
