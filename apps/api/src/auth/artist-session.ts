@@ -42,7 +42,15 @@ export async function issueArtistSession(
 }
 
 export function clearArtistSession(reply: FastifyReply): void {
-  reply.clearCookie(ARTIST_SESSION_COOKIE_NAME, { path: "/" });
+  // See the matching comment in session.ts's clearSession — must
+  // match the secure/sameSite this cookie was issued with, or the
+  // clearing Set-Cookie gets silently dropped by the browser in
+  // production and logout doesn't actually take effect.
+  reply.clearCookie(ARTIST_SESSION_COOKIE_NAME, {
+    path: "/",
+    secure: process.env.NODE_ENV !== "development",
+    sameSite: process.env.NODE_ENV === "development" ? "strict" : "none",
+  });
 }
 
 export async function requireArtistSession(

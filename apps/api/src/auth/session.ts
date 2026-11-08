@@ -53,7 +53,18 @@ export async function issueSession(
 }
 
 export function clearSession(reply: FastifyReply): void {
-  reply.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+  // Must match the attributes issueSession set this cookie with,
+  // specifically secure/sameSite — a clearing Set-Cookie that omits
+  // them has none, and a Set-Cookie without SameSite=None; Secure in
+  // response to a cross-site request gets silently dropped by the
+  // browser in production. Without this, logout looks like it
+  // succeeds but the original cookie survives, and the next page's
+  // auth check still finds a valid session.
+  reply.clearCookie(SESSION_COOKIE_NAME, {
+    path: "/",
+    secure: process.env.NODE_ENV !== "development",
+    sameSite: process.env.NODE_ENV === "development" ? "strict" : "none",
+  });
 }
 
 export async function requireAdminSession(
