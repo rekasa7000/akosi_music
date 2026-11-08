@@ -150,7 +150,10 @@ export type Artist = {
   facebookUrl: string | null;
   spotifyUrl: string | null;
   createdAt: string;
+  deletedAt: string | null;
 };
+
+export type CascadeCounts = { releases?: number; tracks: number; cards: number };
 
 export type MediaType = "AUDIO" | "VIDEO";
 
@@ -167,6 +170,7 @@ export type TrackSummary = {
   // card to be redeemable again) — cardCount only counts active ones.
   cardCount: number;
   locked: boolean;
+  deletedAt: string | null;
 };
 
 export type Release = {
@@ -176,6 +180,7 @@ export type Release = {
   releasedAt: string | null;
   coverImageKey: string | null;
   createdAt: string;
+  deletedAt: string | null;
 };
 
 export type ReleaseWithTracks = Release & { tracks: TrackSummary[] };
@@ -191,6 +196,7 @@ export type Track = {
   coverImageKey: string | null;
   status: string;
   createdAt: string;
+  deletedAt: string | null;
 };
 
 export type MediaUploadPurpose =
@@ -203,18 +209,36 @@ export type MediaUploadPurpose =
 
 export type ArtistWithCounts = Artist & { releaseCount: number; trackCount: number };
 
-export function listArtists() {
-  return request<ArtistWithCounts[]>("/admin/artists");
+export function listArtists(params: { archived?: boolean } = {}) {
+  const qs = params.archived ? "?archived=true" : "";
+  return request<ArtistWithCounts[]>(`/admin/artists${qs}`);
 }
 
 export function createArtist(params: { name: string; slug: string; bio?: string }) {
   return request<Artist>("/admin/artists", { method: "POST", body: JSON.stringify(params) });
 }
 
+export function archiveArtist(id: string) {
+  return request<Artist>(`/admin/artists/${encodeURIComponent(id)}/archive`, { method: "POST" });
+}
+
+export function restoreArtist(id: string) {
+  return request<Artist>(`/admin/artists/${encodeURIComponent(id)}/restore`, { method: "POST" });
+}
+
+export function getArtistCascadeCounts(id: string) {
+  return request<CascadeCounts>(`/admin/artists/${encodeURIComponent(id)}/cascade-counts`);
+}
+
+export function deleteArtistPermanently(id: string) {
+  return request<{ ok: true }>(`/admin/artists/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export type ReleaseSummary = Release & { artistName: string; coverUrl: string | null; trackCount: number };
 
-export function listReleases() {
-  return request<ReleaseSummary[]>("/admin/releases");
+export function listReleases(params: { archived?: boolean } = {}) {
+  const qs = params.archived ? "?archived=true" : "";
+  return request<ReleaseSummary[]>(`/admin/releases${qs}`);
 }
 
 export function getRelease(id: string) {
@@ -233,6 +257,22 @@ export function updateRelease(
     method: "PATCH",
     body: JSON.stringify(params),
   });
+}
+
+export function archiveRelease(id: string) {
+  return request<Release>(`/admin/releases/${encodeURIComponent(id)}/archive`, { method: "POST" });
+}
+
+export function restoreRelease(id: string) {
+  return request<Release>(`/admin/releases/${encodeURIComponent(id)}/restore`, { method: "POST" });
+}
+
+export function getReleaseCascadeCounts(id: string) {
+  return request<CascadeCounts>(`/admin/releases/${encodeURIComponent(id)}/cascade-counts`);
+}
+
+export function deleteReleasePermanently(id: string) {
+  return request<{ ok: true }>(`/admin/releases/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export function createTrack(
@@ -289,6 +329,22 @@ export function updateTrack(
   });
 }
 
+export function archiveTrack(id: string) {
+  return request<Track>(`/admin/tracks/${encodeURIComponent(id)}/archive`, { method: "POST" });
+}
+
+export function restoreTrack(id: string) {
+  return request<Track>(`/admin/tracks/${encodeURIComponent(id)}/restore`, { method: "POST" });
+}
+
+export function getTrackCascadeCounts(id: string) {
+  return request<CascadeCounts>(`/admin/tracks/${encodeURIComponent(id)}/cascade-counts`);
+}
+
+export function deleteTrackPermanently(id: string) {
+  return request<{ ok: true }>(`/admin/tracks/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 function presignMedia(purpose: MediaUploadPurpose, contentType: string) {
   return request<{ key: string; uploadUrl: string }>("/admin/media/presign", {
     method: "POST",
@@ -333,6 +389,7 @@ export type ArtistTrack = {
   playCount: number;
   cardCount: number;
   locked: boolean;
+  deletedAt: string | null;
 };
 
 export type ArtistReleaseSummary = {
@@ -340,6 +397,7 @@ export type ArtistReleaseSummary = {
   title: string;
   releasedAt: string | null;
   tracks: ArtistTrack[];
+  deletedAt: string | null;
 };
 
 export type ArtistAccountStatus = "NONE" | "PENDING" | "ACTIVE";
@@ -477,4 +535,10 @@ export function createCardsBulk(params: { trackId: string; uids: string[]; editi
     method: "POST",
     body: JSON.stringify(params),
   });
+}
+
+// Permanent delete — only allowed once a card is REVOKED (the
+// existing Revoke/Restore toggle is Card's "soft delete" level).
+export function deleteCardPermanently(id: string) {
+  return request<{ ok: true }>(`/admin/cards/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
