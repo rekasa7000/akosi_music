@@ -44,6 +44,32 @@ await app.register(fastifyCors, {
 
 await app.register(fastifyCookie);
 
+// CSRF defense-in-depth for the cross-site cookies issued in
+// production (session.ts/artist-session.ts/fan-unlock.ts all use
+// SameSite=None there, since the web app and API sit on different
+// registrable domains — see the comments on those cookies). SameSite
+// can no longer stop a forged cross-site request on its own, and
+// relying solely on "mutating routes require a JSON body, which
+// forces a CORS preflight" is correct today but not structurally
+// enforced — a future route that accepts a simple-request body would
+// silently lose that protection. Checking Origin explicitly, on every
+// state-changing request, doesn't depend on that staying true.
+//
+// A missing Origin header is let through rather than rejected: CSRF
+// requires an attacker-controlled page running in a victim's browser,
+// and browsers always send Origin on cross-site state-changing
+// requests — so the absence of Origin means this isn't a browser-CSRF
+// scenario at all (a server-to-server call, curl, etc.), not an
+// attacker hiding one.
+const STATE_CHANGING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+app.addHook("onRequest", async (request, reply) => {
+  if (!STATE_CHANGING_METHODS.has(request.method)) return;
+  const origin = request.headers.origin;
+  if (origin && !webOrigins.includes(origin)) {
+    return reply.code(403).send({ error: "Origin not allowed." });
+  }
+});
+
 // Signs both the admin session and the fan-unlock cookie — the fan
 // side now gates real content access (per-track cards), not just the
 // admin panel, so a silently-accepted default here would let anyone

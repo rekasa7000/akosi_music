@@ -79,7 +79,12 @@ export async function grantTrackUnlock(
     // Secure by default — only the explicit local-dev env (plain HTTP
     // on localhost) opts out.
     secure: process.env.NODE_ENV !== "development",
-    sameSite: "lax",
+    // "lax" only attaches cookies to top-level GET navigations, not
+    // JS-initiated fetch/POST from a different site — which is what
+    // every /cards/redeem and /tracks/:id/play call from the deployed
+    // web app actually is (Vercel vs Render are different sites, not
+    // just different origins). See the matching comment in session.ts.
+    sameSite: process.env.NODE_ENV === "development" ? "lax" : "none",
     path: "/",
     maxAge: UNLOCK_TTL_SECONDS,
   });

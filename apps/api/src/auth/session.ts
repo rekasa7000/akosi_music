@@ -38,7 +38,15 @@ export async function issueSession(
     // NODE_ENV, silently dropping Secure and letting the admin
     // session cookie travel over plain HTTP.
     secure: process.env.NODE_ENV !== "development",
-    sameSite: "strict",
+    // The web app and API live on different registrable domains in
+    // production (Vercel vs Render), which makes every API call
+    // cross-site, not just cross-origin — "strict"/"lax" silently
+    // drop the cookie on those requests even with CORS configured
+    // correctly, since SameSite and CORS are independent browser
+    // mechanisms. "none" requires Secure, which is already forced
+    // above. Dev stays same-site (shared "localhost"), so this is a
+    // behavior change only in production.
+    sameSite: process.env.NODE_ENV === "development" ? "strict" : "none",
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   });

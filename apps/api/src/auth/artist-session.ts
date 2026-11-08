@@ -32,7 +32,10 @@ export async function issueArtistSession(
   reply.setCookie(ARTIST_SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV !== "development",
-    sameSite: "strict",
+    // See the matching comment in session.ts — the web app and API
+    // are cross-site in production, so "strict" silently drops this
+    // cookie on every request from the deployed frontend.
+    sameSite: process.env.NODE_ENV === "development" ? "strict" : "none",
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   });
