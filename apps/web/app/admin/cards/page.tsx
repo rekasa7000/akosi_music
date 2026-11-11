@@ -13,8 +13,10 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/admin-api";
 import { AdminShell } from "@/components/admin/admin-shell";
-import { StageLight } from "@/components/admin/stage-light";
-import { StatTile } from "@/components/admin/stat-tile";
+import { PageHeader } from "@/components/dash/page-header";
+import { HeroStatRow, HeroStatTile } from "@/components/dash/hero-stat-tile";
+import { StatusStamp, CARD_STATUS_TONE } from "@/components/dash/status-stamp";
+import { EmptyState } from "@/components/dash/empty-state";
 import { NewCardDialog } from "@/components/admin/catalog/new-card-dialog";
 import { BulkCreateCardsDialog } from "@/components/admin/catalog/bulk-create-cards-dialog";
 import { MarkCardSoldDialog } from "@/components/admin/catalog/mark-card-sold-dialog";
@@ -142,7 +144,7 @@ function CardRow({
   return (
     <div
       className={cn(
-        "relative flex items-center gap-4 overflow-hidden rounded-2xl border-2 bg-akosi-surface py-4 pr-5 pl-6",
+        "relative overflow-hidden rounded-2xl border-2 bg-akosi-surface py-4 pr-4 pl-5 sm:pr-5 sm:pl-6",
         card.status === "REVOKED" ? "border-akosi-fg/15" : "border-akosi-accent-2/30",
       )}
     >
@@ -152,53 +154,55 @@ function CardRow({
           card.status === "REVOKED" ? "bg-akosi-fg/20" : "bg-akosi-accent-2",
         )}
       />
-      <div
-        className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-lg",
-          card.status === "REVOKED" ? "bg-akosi-fg/10 text-akosi-muted-fg" : "text-white",
-        )}
-        style={card.status === "REVOKED" ? undefined : { background: FOIL_SWEEPS[idx % FOIL_SWEEPS.length] }}
-      >
-        <CreditCardIcon className="size-5" />
+      {/* Stacks on mobile; one row from sm up. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+          <div
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-lg",
+              card.status === "REVOKED" ? "bg-akosi-fg/10 text-akosi-muted-fg" : "text-white",
+            )}
+            style={card.status === "REVOKED" ? undefined : { background: FOIL_SWEEPS[idx % FOIL_SWEEPS.length] }}
+          >
+            <CreditCardIcon className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="truncate font-mono text-base font-semibold">{card.uid}</p>
+              <StatusStamp tone={CARD_STATUS_TONE[card.status] ?? "muted"} rotate={false}>
+                {card.status}
+              </StatusStamp>
+            </div>
+            <p className="truncate text-sm text-akosi-muted-fg">
+              {card.trackTitle} — {card.releaseTitle} ({card.artistName})
+            </p>
+            {card.ownerEmail ? (
+              <p className="truncate text-xs text-akosi-muted-fg">Sold to {card.ownerEmail}</p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pl-13 sm:shrink-0 sm:pl-0">
+          {card.editionLabel ? (
+            <Badge variant="outline" className="shrink-0 border-akosi-fg/15 text-akosi-muted-fg">
+              {card.editionLabel}
+            </Badge>
+          ) : null}
+          <span className="shrink-0 text-sm tabular-nums text-akosi-muted-fg">
+            {card.playCount} play{card.playCount === 1 ? "" : "s"}
+          </span>
+          {card.status !== "REVOKED" ? <MarkCardSoldDialog card={card} onUpdated={onSoldUpdated} /> : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            className="shrink-0 text-akosi-muted-fg hover:text-akosi-fg"
+            onClick={() => onToggleRevoke(card)}
+          >
+            {card.status === "REVOKED" ? "Restore" : "Revoke"}
+          </Button>
+          {card.status === "REVOKED" ? <DeleteCardPermanentlyButton card={card} onDeleted={onDeleted} /> : null}
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-mono text-base font-semibold">{card.uid}</p>
-        <p className="truncate text-sm text-akosi-muted-fg">
-          {card.trackTitle} — {card.releaseTitle} ({card.artistName})
-        </p>
-        {card.ownerEmail ? (
-          <p className="truncate text-xs text-akosi-muted-fg">Sold to {card.ownerEmail}</p>
-        ) : null}
-      </div>
-      {card.editionLabel ? (
-        <Badge variant="outline" className="shrink-0 border-akosi-fg/15 text-akosi-muted-fg">
-          {card.editionLabel}
-        </Badge>
-      ) : null}
-      <span className="shrink-0 text-sm tabular-nums text-akosi-muted-fg">
-        {card.playCount} play{card.playCount === 1 ? "" : "s"}
-      </span>
-      <Badge
-        className={cn(
-          "shrink-0 border-none",
-          card.status === "REVOKED"
-            ? "bg-akosi-fg/10 text-akosi-muted-fg"
-            : "bg-akosi-accent-2/15 text-akosi-accent-2",
-        )}
-      >
-        {card.status}
-      </Badge>
-      {card.status !== "REVOKED" ? <MarkCardSoldDialog card={card} onUpdated={onSoldUpdated} /> : null}
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={busy}
-        className="shrink-0 text-akosi-muted-fg hover:text-akosi-fg"
-        onClick={() => onToggleRevoke(card)}
-      >
-        {card.status === "REVOKED" ? "Restore" : "Revoke"}
-      </Button>
-      {card.status === "REVOKED" ? <DeleteCardPermanentlyButton card={card} onDeleted={onDeleted} /> : null}
     </div>
   );
 }
@@ -390,46 +394,50 @@ export default function CardsPage() {
 
   return (
     <AdminShell>
-      <div className="px-8 py-10">
-        {/* The one ambient moment on this page — same confined stage-light
-            glow as the dashboard and artist roster heroes. */}
-        <div className="relative mb-8 overflow-hidden rounded-3xl border-2 border-akosi-fg/15">
-          <StageLight />
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-6 -bottom-14 font-display text-[9rem] leading-none font-bold text-akosi-fg/5 select-none"
-          >
-            #
-          </span>
-          <div className="relative flex flex-wrap items-center justify-between gap-4 px-8 py-10">
-            <div>
-              <p className="font-display text-xs font-semibold tracking-[0.2em] text-akosi-accent-2 uppercase">
-                akosi admin
-              </p>
-              <h1 className="mt-1 font-display text-4xl font-bold lowercase leading-[0.95]">Cards</h1>
-              <p className="mt-2 text-sm text-akosi-muted-fg">
-                Manually provisioned cards and the tracks they unlock.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {tracks ? <BulkCreateCardsDialog tracks={tracks} onCreated={refreshAfterCreate} /> : null}
-              {tracks ? <NewCardDialog tracks={tracks} onCreated={refreshAfterCreate} /> : null}
-            </div>
-          </div>
-        </div>
+      <div className="px-4 py-6 sm:px-8 sm:py-10">
+        <PageHeader
+          eyebrow="akosi admin"
+          title="cards"
+          word="editions"
+          description="Manually provisioned cards and the tracks they unlock. Sales are hand-recorded — no checkout exists yet."
+          actions={
+            tracks ? (
+              <>
+                <BulkCreateCardsDialog tracks={tracks} onCreated={refreshAfterCreate} />
+                <NewCardDialog tracks={tracks} onCreated={refreshAfterCreate} />
+              </>
+            ) : null
+          }
+        />
 
-        {stats ? (
-          <div className="mb-8 grid grid-cols-3 gap-4">
-            <StatTile icon={CreditCardIcon} label="Total cards" value={stats.total} accent="accent" />
-            <StatTile icon={CheckCircle2Icon} label="Active" value={stats.active} accent="accent-2" />
-            <StatTile icon={XCircleIcon} label="Revoked" value={stats.revoked} accent="accent" />
+        {stats && stats.total > 0 ? (
+          <div className="mt-6 mb-8">
+            <HeroStatRow cols={3}>
+              {/* The screen's single highlight: how many codes can
+                  unlock a track right now. */}
+              <HeroStatTile
+                label="Redeemable"
+                value={stats.active}
+                icon={CheckCircle2Icon}
+                sweep="ember"
+                tilt={-1}
+                highlight
+                highlightNote="unlocks now"
+              />
+              <HeroStatTile label="Total cards" value={stats.total} icon={CreditCardIcon} sweep="plum" delay={60} />
+              <HeroStatTile label="Revoked" value={stats.revoked} icon={XCircleIcon} sweep="flare" tilt={1} delay={120} />
+            </HeroStatRow>
           </div>
         ) : null}
 
         {stats !== null && stats.total === 0 ? (
-          <p className="text-sm text-akosi-muted-fg">
-            No cards yet — provision one to gate a track.
-          </p>
+          <div className="mt-6">
+            <EmptyState
+              title="no cards provisioned yet"
+              body="A card is a code bound to a track — provision one and the track goes private until that code unlocks it."
+              cta={tracks ? <NewCardDialog tracks={tracks} onCreated={refreshAfterCreate} /> : undefined}
+            />
+          </div>
         ) : (
           <>
             <div className="mb-5 flex flex-wrap items-center gap-3">
