@@ -84,9 +84,15 @@ export async function requireArtistSession(
     // same way.
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { passwordSetAt: true, artist: { select: { invitedAt: true } } },
+      select: { passwordSetAt: true, artist: { select: { invitedAt: true, deletedAt: true } } },
     });
     if (!user) {
+      return reply.code(401).send({ error: "Session expired or invalid." });
+    }
+    // Archiving an artist must revoke portal access immediately, on
+    // every artist route — not just stop new logins. Checked here
+    // centrally so no individual route can forget it.
+    if (user.artist?.deletedAt) {
       return reply.code(401).send({ error: "Session expired or invalid." });
     }
     const passwordSetAtSeconds = user.passwordSetAt
