@@ -365,11 +365,15 @@ export async function uploadMedia(purpose: MediaUploadPurpose, file: File): Prom
 
 // --- Dashboard stats ---
 
+export type PlaysByDay = { date: string; plays: number }[];
+
 export type Stats = {
   artistCount: number;
   releaseCount: number;
   trackCount: number;
   totalPlays: number;
+  playsToday: number;
+  playsByDay: PlaysByDay;
   cardCount: number;
   cardsByStatus: { UNCLAIMED: number; CLAIMED: number; REVOKED: number };
 };
