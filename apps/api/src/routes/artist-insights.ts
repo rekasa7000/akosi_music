@@ -20,12 +20,12 @@ const Stats = Type.Object({
   ownerCount: Type.Integer(),
 });
 
-// The uid is the unlock code — the admin needs to read it back to match
-// a physical card, but an artist only needs to recognize which card a
-// row is, so they get a masked tail, never the full code.
+// The uid is the unlock code, so no part of it may appear here — the
+// display serial is derived from the card's internal id instead, which
+// identifies the row without leaking secret material.
 const ArtistCard = Type.Object({
   id: Type.String(),
-  uidTail: Type.String(),
+  serial: Type.String(),
   status: Type.String(),
   editionLabel: Type.Union([Type.String(), Type.Null()]),
   provisionedAt: Type.String(),
@@ -36,26 +36,23 @@ const ArtistCard = Type.Object({
 });
 
 const Fan = Type.Object({
-  // Masked (first character + domain) — the artist sees who their
-  // collectors are without the platform handing out raw emails.
+  // Opaque pseudonym ("Collector #N" by first-claim order) — the
+  // artist sees their crowd's shape, never fan emails or fragments of
+  // them. sinceMonth is month-precision for the same reason: a fan's
+  // exact claim timestamp is the fan's data, not the artist's.
   ownerLabel: Type.String(),
   cardsOwned: Type.Integer(),
   totalPlays: Type.Integer(),
-  firstClaimedAt: Type.String(),
+  sinceMonth: Type.String(),
 });
 
 const ErrorResponse = Type.Object({ error: Type.String() });
 
-function maskEmail(email: string): string {
-  const [local, domain] = email.split("@");
-  if (!domain) return "•••";
-  const head = local.slice(0, Math.min(2, local.length));
-  return `${head}•••@${domain}`;
-}
-
+// deletedAt filter is defense in depth — requireArtistSession already
+// rejects archived artists centrally.
 async function requireOwnArtist(artistUserId: string | undefined) {
   if (!artistUserId) return null;
-  return prisma.artist.findUnique({ where: { userId: artistUserId } });
+  return prisma.artist.findFirst({ where: { userId: artistUserId, deletedAt: null } });
 }
 
 export async function artistInsightRoutes(app: FastifyInstance) {
@@ -137,7 +134,7 @@ export async function artistInsightRoutes(app: FastifyInstance) {
 
       return cards.map((card) => ({
         id: card.id,
-        uidTail: card.uid.slice(-4),
+        serial: card.id.slice(-4).toUpperCase(),
         status: card.status,
         editionLabel: card.editionLabel,
         provisionedAt: card.provisionedAt.toISOString(),
@@ -164,7 +161,6 @@ export async function artistInsightRoutes(app: FastifyInstance) {
       const ownerships = await prisma.cardOwnership.findMany({
         where: { card: { artistId: artist.id } },
         include: {
-          user: { select: { email: true } },
           card: { select: { _count: { select: { playEvents: true } } } },
         },
         orderBy: { claimedAt: "asc" },
@@ -182,7 +178,9 @@ export async function artistInsightRoutes(app: FastifyInstance) {
           existing.totalPlays += plays;
         } else {
           byUser.set(ownership.userId, {
-            ownerLabel: maskEmail(ownership.user.email),
+            // Numbered in first-claim order — stable as long as earlier
+            // claims aren't deleted, and carries zero fan identity.
+            ownerLabel: `Collector #${byUser.size + 1}`,
             cardsOwned: 1,
             totalPlays: plays,
             firstClaimedAt: ownership.claimedAt,
@@ -192,7 +190,10 @@ export async function artistInsightRoutes(app: FastifyInstance) {
 
       return [...byUser.values()]
         .sort((a, b) => b.totalPlays - a.totalPlays || b.cardsOwned - a.cardsOwned)
-        .map((fan) => ({ ...fan, firstClaimedAt: fan.firstClaimedAt.toISOString() }));
+        .map(({ firstClaimedAt, ...fan }) => ({
+          ...fan,
+          sinceMonth: firstClaimedAt.toISOString().slice(0, 7),
+        }));
     },
   );
 }

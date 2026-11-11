@@ -17,8 +17,9 @@ function provisionedLabel(iso: string): string {
 }
 
 // A provisioned card rendered as the physical object it stands for:
-// foil sweep, ticket-stub notches, stamped status. The uid is the
-// unlock code, so the artist only ever sees its masked tail.
+// foil sweep, ticket-stub notches, stamped status. The printed serial
+// is derived from the card's internal id — the uid (unlock code)
+// never reaches this page.
 function FoilCardTile({ card, idx }: { card: api.ArtistCard; idx: number }) {
   const isNew = Date.now() - new Date(card.provisionedAt).getTime() < WEEK_MS;
   const revoked = card.status === "REVOKED";
@@ -48,7 +49,7 @@ function FoilCardTile({ card, idx }: { card: api.ArtistCard; idx: number }) {
             <p className="truncate text-sm opacity-80">{card.releaseTitle}</p>
           </div>
           <div className="flex items-end justify-between gap-2">
-            <p className="font-mono text-sm tracking-widest opacity-90">•••• {card.uidTail}</p>
+            <p className="font-mono text-sm tracking-widest opacity-90">Nº {card.serial}</p>
             <span className="font-display text-xs opacity-80">akosi ♪</span>
           </div>
         </div>

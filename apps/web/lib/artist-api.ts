@@ -175,10 +175,11 @@ export function getStats() {
   return request<ArtistStats>("/artist/stats");
 }
 
-// uid is the unlock code, so artists only ever get a masked tail.
+// The display serial is derived from the card's internal id — no part
+// of the uid (the unlock code) ever reaches the artist portal.
 export type ArtistCard = {
   id: string;
-  uidTail: string;
+  serial: string;
   status: "UNCLAIMED" | "CLAIMED" | "REVOKED";
   editionLabel: string | null;
   provisionedAt: string;
@@ -192,11 +193,13 @@ export function listCards() {
   return request<ArtistCard[]>("/artist/cards");
 }
 
+// ownerLabel is an opaque "Collector #N" pseudonym and sinceMonth is
+// month-precision ("2026-11") — fan identity stays with the platform.
 export type Fan = {
   ownerLabel: string;
   cardsOwned: number;
   totalPlays: number;
-  firstClaimedAt: string;
+  sinceMonth: string;
 };
 
 export function listFans() {

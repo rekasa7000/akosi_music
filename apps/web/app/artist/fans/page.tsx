@@ -10,8 +10,12 @@ import { StatusStamp } from "@/components/dash/status-stamp";
 import { TrendChart } from "@/components/dash/trend-chart";
 import { HeroStatRow, HeroStatTile } from "@/components/dash/hero-stat-tile";
 
-function claimedLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+// sinceMonth arrives month-precision ("2026-11") by design.
+function claimedLabel(month: string): string {
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default function ArtistFansPage() {
@@ -30,7 +34,7 @@ export default function ArtistFansPage() {
           eyebrow="akosi artist portal"
           title="fans"
           word="the crowd"
-          description="The people holding your cards. Emails are masked — you see your crowd, not their inboxes."
+          description="The people holding your cards. Collectors stay pseudonymous — you see your crowd, not their identities."
         />
 
         {stats ? (
@@ -77,7 +81,7 @@ export default function ArtistFansPage() {
                         <th scope="col" className="px-5 py-3.5 font-semibold">Fan</th>
                         <th scope="col" className="px-5 py-3.5 text-right font-semibold">Cards</th>
                         <th scope="col" className="px-5 py-3.5 text-right font-semibold">Plays</th>
-                        <th scope="col" className="px-5 py-3.5 text-right font-semibold">First claimed</th>
+                        <th scope="col" className="px-5 py-3.5 text-right font-semibold">Collecting since</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -98,7 +102,7 @@ export default function ArtistFansPage() {
                           <td className="px-5 py-3.5 text-right tabular-nums">{fan.cardsOwned}</td>
                           <td className="px-5 py-3.5 text-right tabular-nums">{fan.totalPlays.toLocaleString()}</td>
                           <td className="px-5 py-3.5 text-right text-akosi-muted-fg tabular-nums">
-                            {claimedLabel(fan.firstClaimedAt)}
+                            {claimedLabel(fan.sinceMonth)}
                           </td>
                         </tr>
                       ))}
@@ -126,7 +130,7 @@ export default function ArtistFansPage() {
                           {fan.cardsOwned} card{fan.cardsOwned === 1 ? "" : "s"}
                         </span>
                         <span className="tabular-nums">{fan.totalPlays.toLocaleString()} plays</span>
-                        <span className="tabular-nums">since {claimedLabel(fan.firstClaimedAt)}</span>
+                        <span className="tabular-nums">since {claimedLabel(fan.sinceMonth)}</span>
                       </div>
                     </li>
                   ))}
