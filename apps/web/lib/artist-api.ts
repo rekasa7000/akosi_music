@@ -156,6 +156,53 @@ export function getTrackPlayUrl(id: string) {
   return request<PlayResponse>(`/artist/tracks/${encodeURIComponent(id)}/play`);
 }
 
+// --- Insights (stats / cards / fans — all scoped server-side to "my artist") ---
+
+export type PlaysByDay = { date: string; plays: number }[];
+
+export type ArtistStats = {
+  totalPlays: number;
+  playsToday: number;
+  playsByDay: PlaysByDay;
+  releaseCount: number;
+  trackCount: number;
+  cardCount: number;
+  cardsByStatus: { UNCLAIMED: number; CLAIMED: number; REVOKED: number };
+  ownerCount: number;
+};
+
+export function getStats() {
+  return request<ArtistStats>("/artist/stats");
+}
+
+// uid is the unlock code, so artists only ever get a masked tail.
+export type ArtistCard = {
+  id: string;
+  uidTail: string;
+  status: "UNCLAIMED" | "CLAIMED" | "REVOKED";
+  editionLabel: string | null;
+  provisionedAt: string;
+  trackTitle: string;
+  releaseTitle: string;
+  playCount: number;
+  claimed: boolean;
+};
+
+export function listCards() {
+  return request<ArtistCard[]>("/artist/cards");
+}
+
+export type Fan = {
+  ownerLabel: string;
+  cardsOwned: number;
+  totalPlays: number;
+  firstClaimedAt: string;
+};
+
+export function listFans() {
+  return request<Fan[]>("/artist/fans");
+}
+
 // --- Media uploads (presign then direct PUT, same pattern as admin-api.ts) ---
 
 export type MediaUploadPurpose = "release-cover" | "track-cover" | "track-audio" | "track-video";
