@@ -41,7 +41,7 @@ export function ArtistLoginFlow() {
 
   if (stage.kind === "loading") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="artist portal · stage door">
         <p className="text-center text-sm text-akosi-muted-fg">Checking session…</p>
       </AuthShell>
     );
@@ -49,7 +49,7 @@ export function ArtistLoginFlow() {
 
   if (stage.kind === "login") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="artist portal · stage door">
         <AuthHeading title="Sign in" description="Artist portal access." />
         <form
           className="space-y-4"
@@ -101,7 +101,7 @@ export function ArtistLoginFlow() {
   // temp password. email + currentPassword already came from the login
   // submit, so this step doesn't ask the artist to retype anything.
   return (
-    <AuthShell>
+    <AuthShell eyebrow="artist portal · stage door">
       <AuthHeading
         title="Set a password"
         description="Replace the temporary password from your invite with one only you know."

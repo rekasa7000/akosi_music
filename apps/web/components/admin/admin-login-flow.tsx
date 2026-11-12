@@ -167,7 +167,7 @@ export function AdminLoginFlow() {
 
   if (stage.kind === "loading") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="akosi admin · backstage">
         <p className="text-center text-sm text-akosi-muted-fg">Checking session…</p>
       </AuthShell>
     );
@@ -175,7 +175,7 @@ export function AdminLoginFlow() {
 
   if (stage.kind === "login") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="akosi admin · backstage">
         <AuthHeading
           title="Sign in"
           description="Admin access only. You'll stay signed in for 12 hours."
@@ -215,7 +215,7 @@ export function AdminLoginFlow() {
 
   if (stage.kind === "set-email") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="akosi admin · backstage">
         <SetupProgress index={setupStepIndex(stage.kind)} />
         <AuthHeading
           title="Add your email"
@@ -251,7 +251,7 @@ export function AdminLoginFlow() {
 
   if (stage.kind === "verify-email") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="akosi admin · backstage">
         <SetupProgress index={setupStepIndex(stage.kind)} />
         <AuthHeading
           title="Check your email"
@@ -287,7 +287,7 @@ export function AdminLoginFlow() {
 
   if (stage.kind === "password-setup") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="akosi admin · backstage">
         <SetupProgress index={setupStepIndex(stage.kind)} />
         <AuthHeading
           title="Set a password"
@@ -342,7 +342,7 @@ export function AdminLoginFlow() {
 
   if (stage.kind === "totp-enroll") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="akosi admin · backstage">
         <SetupProgress index={setupStepIndex(stage.kind)} />
         <AuthHeading
           title="Set up an authenticator"
@@ -383,7 +383,7 @@ export function AdminLoginFlow() {
 
   if (stage.kind === "select-method") {
     return (
-      <AuthShell>
+      <AuthShell eyebrow="akosi admin · backstage">
         <AuthHeading
           title="Verify it's you"
           description="Your password checked out — pick a second factor to finish signing in."
@@ -435,7 +435,7 @@ export function AdminLoginFlow() {
 
   // enter-code
   return (
-    <AuthShell>
+    <AuthShell eyebrow="akosi admin · backstage">
       <AuthHeading
         title="Enter the code"
         description={
