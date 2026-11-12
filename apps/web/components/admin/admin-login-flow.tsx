@@ -391,7 +391,10 @@ export function AdminLoginFlow() {
         <div className="space-y-3">
           {stage.methods.includes("TOTP") && (
             <Button
-              className="w-full flex-col items-start gap-0.5 border-akosi-fg/15 bg-transparent! px-4 py-3 text-akosi-fg! hover:bg-akosi-fg/10!"
+              // h-auto + whitespace-normal override the shadcn button
+              // base (fixed h-9, nowrap), which clipped this two-line
+              // content on narrow screens.
+              className="h-auto w-full flex-col items-start gap-0.5 border-akosi-fg/15 bg-transparent! px-4 py-3 text-left whitespace-normal text-akosi-fg! hover:bg-akosi-fg/10!"
               variant="outline"
               disabled={busy}
               onClick={() =>
@@ -410,7 +413,10 @@ export function AdminLoginFlow() {
           )}
           {stage.methods.includes("EMAIL") && (
             <Button
-              className="w-full flex-col items-start gap-0.5 border-akosi-fg/15 bg-transparent! px-4 py-3 text-akosi-fg! hover:bg-akosi-fg/10!"
+              // h-auto + whitespace-normal override the shadcn button
+              // base (fixed h-9, nowrap), which clipped this two-line
+              // content on narrow screens.
+              className="h-auto w-full flex-col items-start gap-0.5 border-akosi-fg/15 bg-transparent! px-4 py-3 text-left whitespace-normal text-akosi-fg! hover:bg-akosi-fg/10!"
               variant="outline"
               disabled={busy}
               onClick={() =>
