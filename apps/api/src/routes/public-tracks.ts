@@ -37,10 +37,12 @@ export async function publicTrackRoutes(app: FastifyInstance) {
       }
 
       const activeCardIds = track.cards.filter((c) => c.status !== "REVOKED").map((c) => c.id);
-      // Gated by *ever* having had a card, not by currently having an
-      // active one — see the matching note in public-releases.ts.
-      const gated = track.cards.length > 0;
-      if (gated && !isTrackUnlocked(request, track.id, activeCardIds)) {
+      // The card is the key — there is no public tier. Every track
+      // requires a redeemed card in this browser, including tracks
+      // with no cards provisioned yet (those are simply not listenable
+      // until the admin presses a card for them). Admins play through
+      // their own authenticated /admin/tracks/:id/play route instead.
+      if (!isTrackUnlocked(request, track.id, activeCardIds)) {
         return reply.code(403).send({ error: "This track is locked." });
       }
 
@@ -51,8 +53,7 @@ export async function publicTrackRoutes(app: FastifyInstance) {
 
       const url = await createPresignedPlaybackUrl({ bucket: MEDIA_BUCKET, key });
       // Attributes the play to whichever card actually unlocked this
-      // track in this request, if any — null for a track with no
-      // cards (still public).
+      // track in this request.
       const cardId = getUnlockCardId(request, track.id);
       await prisma.playEvent.create({ data: { trackId: track.id, cardId } });
 

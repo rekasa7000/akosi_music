@@ -60,12 +60,11 @@ async function serializeTrack(
   releaseCoverKey: string | null,
 ): Promise<Static<typeof PublicTrack>> {
   const activeCardIds = track.cards.filter((c) => c.status !== "REVOKED").map((c) => c.id);
-  // Gated by *ever* having had a card, not by currently having an
-  // active one — if the only card gets revoked, activeCardIds goes
-  // empty, but the track must stay locked (just unredeemable until a
-  // new card exists), not fall back to public.
-  const gated = track.cards.length > 0;
-  const locked = gated && !isTrackUnlocked(request, track.id, activeCardIds);
+  // Every track is locked until this browser redeems a card for it —
+  // there is no public tier, and a track whose only card was revoked
+  // stays locked (unredeemable until a new card exists) rather than
+  // falling back to public.
+  const locked = !isTrackUnlocked(request, track.id, activeCardIds);
 
   if (locked) {
     return {
