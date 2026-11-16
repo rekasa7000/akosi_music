@@ -69,6 +69,53 @@ services:
       timeout: 5s
       retries: 10
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      NODE_ENV: development
+      ENABLE_DEV_UPLOAD_ROUTES: "true"
+      DATABASE_URL: "postgresql://akosi:akosi@postgres:5432/akosi"
+      S3_ENDPOINT: "http://localstack:4566"
+      S3_REGION: "us-east-1"
+      S3_ACCESS_KEY_ID: "akosi"
+      S3_SECRET_ACCESS_KEY: "akosi-dev-secret"
+      S3_BUCKET_RAW: "akosi-raw"
+      S3_BUCKET_MEDIA: "akosi-media"
+      JWT_SECRET: "dev-only-insecure-secret-change-me"
+      TOTP_ENCRYPTION_KEY: "4RG3dB7AukApFVV8zTYudg7CM/sNQJkeg7kQX6VtNWE="
+      SMTP_HOST: "mailpit"
+      SMTP_PORT: 1025
+      SMTP_FROM: "Akosi Admin <admin@akosi.local>"
+    # Image's runtime stage keeps prisma as a dependency specifically
+    # so migrate deploy can run before the app takes traffic (same
+    # reasoning as render.yaml's preDeployCommand).
+    command: sh -c "cd /app && pnpm --filter @akosi/database migrate:deploy && cd /app/apps/api && node dist/index.js"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:4000"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
 volumes:
   akosi-postgres-data:
   akosi-localstack-data:
