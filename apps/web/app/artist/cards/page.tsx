@@ -21,7 +21,13 @@ function provisionedLabel(iso: string): string {
 // is derived from the card's internal id — the uid (unlock code)
 // never reaches this page.
 function FoilCardTile({ card, idx }: { card: api.ArtistCard; idx: number }) {
-  const isNew = Date.now() - new Date(card.provisionedAt).getTime() < WEEK_MS;
+  // Sampled once per mount rather than read live — Date.now() is an
+  // impure read, and a badge that's already showing doesn't need to
+  // flip off mid-session just because the tile re-rendered. A lazy
+  // useState initializer (not useMemo, which can re-run) is the
+  // pattern React's purity check recognizes as "evaluated once."
+  const [now] = useState(() => Date.now());
+  const isNew = now - new Date(card.provisionedAt).getTime() < WEEK_MS;
   const revoked = card.status === "REVOKED";
 
   return (

@@ -12,6 +12,10 @@ export function ThemeToggle({ className }: { className?: string }) {
   // Avoids a server/client mismatch flash — resolvedTheme is only
   // known after mount, since it depends on system preference/localStorage.
   const [mounted, setMounted] = useState(false);
+  // No render-time alternative exists here: "has hydration happened
+  // yet" is only knowable from an effect, since effects only run
+  // client-side after the server-rendered markup is already committed.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   const label = mounted && resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";

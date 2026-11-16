@@ -30,8 +30,18 @@ export default function ArtistsPage() {
   const [archived, setArchived] = useState(false);
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
+  // Resetting to the loading state belongs to the same render that
+  // notices `archived` changed, not a later effect pass — the
+  // "adjusting state when a prop changes" pattern from
+  // react.dev/learn/you-might-not-need-an-effect, so the list clears
+  // immediately instead of flashing stale data for a frame.
+  const [prevArchived, setPrevArchived] = useState(archived);
+  if (archived !== prevArchived) {
+    setPrevArchived(archived);
     setArtists(null);
+  }
+
+  useEffect(() => {
     api.listArtists({ archived }).then(setArtists);
   }, [archived]);
 
@@ -47,6 +57,13 @@ export default function ArtistsPage() {
       (a) => a.name.toLowerCase().includes(q) || a.slug.toLowerCase().includes(q),
     );
   }, [artists, query]);
+
+  // Sampled once per render pass rather than per-tile inside the map
+  // below — Date.now() is an impure read, and every tile in the same
+  // pass should agree on what "now" means anyway. A lazy useState
+  // initializer (not useMemo, which can re-run) is the pattern React's
+  // purity check recognizes as "evaluated exactly once."
+  const [now] = useState(() => Date.now());
 
   return (
     <AdminShell>
@@ -120,8 +137,7 @@ export default function ArtistsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {filtered.map((artist, idx) => {
-              const isNew =
-                !artist.deletedAt && Date.now() - new Date(artist.createdAt).getTime() < WEEK_MS;
+              const isNew = !artist.deletedAt && now - new Date(artist.createdAt).getTime() < WEEK_MS;
               return (
                 <Link
                   key={artist.id}
