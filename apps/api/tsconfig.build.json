@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  // typecheck (tsc --noEmit) still uses the base config, so test files
+  // stay typechecked — this one's only for the emitting build, which
+  // must not ship compiled *.test.js into dist.
+  "exclude": ["src/**/*.test.ts", "src/test"]
+}
