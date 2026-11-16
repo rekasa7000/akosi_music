@@ -3,17 +3,19 @@
 # workspace package deps today).
 
 FROM node:20-slim AS base
-# python3/make/g++: the workspace install pulls in argon2 (a transitive
-# dep via @akosi/database) which has no prebuilt binary matching this
-# image and falls back to compiling from source — same reasoning as
-# apps/api/Dockerfile.
-RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 WORKDIR /app
 
 FROM base AS build
+# python3/make/g++: the workspace install pulls in argon2 (a transitive
+# dep via @akosi/database) which has no prebuilt binary matching this
+# image and falls back to compiling from source — same reasoning as
+# apps/api/Dockerfile. Installed only in this stage, not in `base`:
+# `next start` never compiles anything, so the runtime image built
+# from `base` below has no reason to carry a C/C++ toolchain.
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN pnpm install --frozen-lockfile
 # NEXT_PUBLIC_* vars are inlined into the client bundle at build time,
@@ -27,4 +29,7 @@ ENV NODE_ENV=production
 COPY --from=build /app /app
 WORKDIR /app/apps/web
 EXPOSE 3000
+# node:20-slim's built-in non-root user — next start only needs to
+# read the build output and listen on a port, not run as root.
+USER node
 CMD ["pnpm", "start"]
