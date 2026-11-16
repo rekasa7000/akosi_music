@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    # A real Postgres, not a mock — apps/api's integration tests
+    # (admin-auth, card redemption) exercise Prisma against it
+    # directly, including the row-level race-condition defenses that
+    # are the whole point of several of those tests.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: akosi
+          POSTGRES_PASSWORD: akosi
+          POSTGRES_DB: akosi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U akosi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://akosi:akosi@localhost:5432/akosi
+      NODE_ENV: test
+      # Dev-only placeholder values, not real secrets — same ones
+      # committed in apps/api/.env for local docker-compose dev.
+      JWT_SECRET: ci-test-secret-not-for-production
+      TOTP_ENCRYPTION_KEY: 4RG3dB7AukApFVV8zTYudg7CM/sNQJkeg7kQX6VtNWE=
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Prisma client generation isn't part of any package's `build`
+      # script — apps/api's Dockerfile runs this as its own step for
+      # the same reason, and apps/web/packages/database's typecheck
+      # and build both fail without it.
+      - run: pnpm --filter @akosi/database generate
+
+      - run: pnpm --filter @akosi/database migrate:deploy
+
+      - run: pnpm turbo run lint typecheck build test
