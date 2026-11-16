@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# Least-privilege default: this job only reads the repo and runs
+# lint/typecheck/build/test, it never needs to write anything back
+# (no PR comments, no releases, no package publishing) — so the
+# GITHUB_TOKEN every step implicitly gets should be read-only.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -12,6 +19,8 @@ concurrency:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # A real Postgres, not a mock — apps/api's integration tests
     # (admin-auth, card redemption) exercise Prisma against it
     # directly, including the row-level race-condition defenses that
@@ -38,11 +47,21 @@ jobs:
       JWT_SECRET: ci-test-secret-not-for-production
       TOTP_ENCRYPTION_KEY: 4RG3dB7AukApFVV8zTYudg7CM/sNQJkeg7kQX6VtNWE=
     steps:
-      - uses: actions/checkout@v4
+      # Actions pinned to commit SHAs (not mutable version tags) per
+      # supply-chain hardening guidance — each comment names the tag
+      # the SHA currently resolves to; Dependabot's github-actions
+      # ecosystem bumps these automatically.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # This job builds and runs untrusted PR code (lint/test
+          # scripts, package install scripts) — no step after this one
+          # needs an authenticated git remote, so don't leave the
+          # checkout token sitting on disk for them to find.
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: pnpm
