@@ -4,8 +4,12 @@ node_modules
 **/.next
 **/.turbo
 .git
-.env
-**/.env
-**/.env.local
+# Every .env variant, no exceptions — real deployments inject env vars
+# directly (see apps/api/src/env.ts), nothing ever needs to read a
+# baked-in .env file at runtime, so there's no reason for any image to
+# contain one. The previous .env/**/.env/**/.env.local patterns missed
+# .env.production (and any other .env.* file) entirely, which let
+# apps/api/.env.production get copied into built images via COPY . .
+**/.env*
 *.log
 .playwright-mcp
