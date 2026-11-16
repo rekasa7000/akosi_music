@@ -32,3 +32,7 @@ Thumbs.db
 # Playwright MCP test screenshots (scratch, not meant to be committed)
 .playwright-mcp/
 .neon
+
+# graphify skill output — AST/semantic cache and graph data, regenerated
+# per run, not meant to be committed (same category as .turbo/ above).
+graphify-out/
